@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "WA Group Exporter",
+  "version": "12.0",
+  "description": "Export chat & member grup WhatsApp — 1 file per chat",
+  "permissions": ["activeTab", "scripting", "downloads", "storage", "tabs"],
+  "host_permissions": ["https://web.whatsapp.com/*"],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
