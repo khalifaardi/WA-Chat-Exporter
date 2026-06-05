@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{width:370px;font-family:'DM Sans',sans-serif;background:#0a0f0d;color:#e8f5e9;min-height:520px}
+
+  .header{background:linear-gradient(135deg,#1a3a2a,#0d2118);padding:14px 16px 12px;border-bottom:1px solid #1e3d2a;display:flex;align-items:center;gap:10px}
+  .dot{width:9px;height:9px;background:#25D366;border-radius:50%;box-shadow:0 0 8px #25D36688;flex-shrink:0}
+  .header h1{font-size:14px;font-weight:600;color:#e8f5e9}
+  .header p{font-size:10px;color:#5a8a6a;margin-top:2px}
+
+  .tabs{display:flex;background:#0d1a12;border-bottom:1px solid #1e3d2a}
+  .tab{flex:1;padding:9px 6px;text-align:center;font-size:11px;font-weight:500;color:#4a7a5a;cursor:pointer;border-bottom:2px solid transparent;transition:all .2s}
+  .tab.active{color:#25D366;border-bottom-color:#25D366;background:#0f2018}
+  .tab:hover:not(.active){color:#8abf9a;background:#0f1a12}
+
+  .panel{display:none;padding:14px}
+  .panel.active{display:block}
+
+  .label{font-size:10px;font-weight:600;color:#4a7a5a;text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px;margin-top:12px}
+  .label:first-child{margin-top:0}
+
+  input[type="date"],select{width:100%;padding:7px 9px;background:#0f2018;border:1px solid #1e3d2a;border-radius:7px;color:#c8e6c9;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;transition:border .2s}
+  input[type="date"]:focus,select:focus{border-color:#25D366}
+  .date-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+  .safe-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#0f2018;border:1px solid #1e3d2a;border-radius:7px;cursor:pointer;user-select:none}
+  .safe-row .shield{font-size:15px}
+  .safe-row .info{flex:1}
+  .safe-row .info strong{font-size:11.5px;color:#c8e6c9;display:block}
+  .safe-row .info span{font-size:10px;color:#4a7a5a;display:block;margin-top:1px}
+  .toggle{width:34px;height:19px;background:#1e3d2a;border-radius:10px;position:relative;transition:background .25s;flex-shrink:0}
+  .toggle.on{background:#25D366}
+  .toggle::after{content:'';position:absolute;top:3px;left:3px;width:13px;height:13px;background:#fff;border-radius:50%;transition:transform .25s}
+  .toggle.on::after{transform:translateX(15px)}
+
+  .info-box{background:#0f2018;border:1px solid #1a3d2a;border-radius:7px;padding:8px 10px;font-size:11px;color:#4a9a6a;line-height:1.7;margin-top:8px}
+  .info-box strong{color:#25D366}
+
+  /* Search bar */
+  .search-wrap{position:relative;margin-bottom:6px}
+  .search-wrap input{width:100%;padding:6px 9px 6px 28px;background:#0f2018;border:1px solid #1e3d2a;border-radius:7px;color:#c8e6c9;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;transition:border .2s}
+  .search-wrap input:focus{border-color:#25D366}
+  .search-wrap .ico{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:12px;pointer-events:none;opacity:.5}
+  .search-count{font-size:10px;color:#3a6a4a;position:absolute;right:9px;top:50%;transform:translateY(-50%)}
+
+  .chat-list-wrap{background:#0f2018;border:1px solid #1e3d2a;border-radius:7px;max-height:160px;overflow-y:auto}
+  .chat-list-wrap::-webkit-scrollbar{width:4px}
+  .chat-list-wrap::-webkit-scrollbar-thumb{background:#2a5a3a;border-radius:4px}
+  .chat-item{display:flex;align-items:center;gap:8px;padding:6px 10px;cursor:pointer;border-bottom:1px solid #162a1e;transition:background .15s}
+  .chat-item:last-child{border-bottom:none}
+  .chat-item:hover{background:#162a1e}
+  .chat-item input[type="checkbox"]{accent-color:#25D366;width:13px;height:13px;flex-shrink:0}
+  .chat-item .name{font-size:11.5px;color:#b0d4b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+  .badge{font-size:9px;padding:1px 5px;border-radius:4px;flex-shrink:0}
+  .badge.group{background:#1a3d2a;color:#4caf70}
+  .badge.personal{background:#1a2a3d;color:#4a90d9}
+  .select-all-row{display:flex;align-items:center;gap:6px;padding:6px 10px;background:#0d1a12;border-bottom:1px solid #1e3d2a;border-radius:7px 7px 0 0;position:sticky;top:0;z-index:1}
+  .select-all-row span{font-size:11px;color:#5a9a6a;font-weight:600}
+
+  .btn{width:100%;padding:9px;margin-top:8px;border:none;border-radius:8px;cursor:pointer;font-size:12.5px;font-weight:600;font-family:'DM Sans',sans-serif;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:6px}
+  .btn-primary{background:#25D366;color:#0a1a0f}
+  .btn-primary:hover:not(:disabled){background:#20be5b;transform:translateY(-1px);box-shadow:0 4px 12px #25D36633}
+  .btn-secondary{background:#162a1e;color:#7abf8a;border:1px solid #1e3d2a}
+  .btn-secondary:hover:not(:disabled){background:#1e3d2a}
+  .btn-danger{background:#3d1a1a;color:#e57373;border:1px solid #5a2a2a;display:none}
+  .btn-danger:hover{background:#5a2a2a}
+  .btn-pause{background:#1a2d3a;color:#64b5f6;border:1px solid #1e3040;display:none}
+  .btn-pause:hover{background:#1e3a4a}
+  .btn:disabled{opacity:.4;cursor:not-allowed;transform:none!important}
+  .btn-load{width:100%;padding:7px;background:#162a1e;border:1px dashed #2a5a3a;border-radius:7px;color:#5a9a6a;font-size:11.5px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .2s}
+  .btn-load:hover:not(:disabled){background:#1e3d2a;color:#8abf9a}
+  .btn-load:disabled{opacity:.5;cursor:not-allowed}
+
+  #status,#statusMember{margin-top:10px;padding:8px 11px;background:#0f2018;border:1px solid #1e3d2a;border-radius:7px;font-size:11.5px;color:#7abf8a;min-height:36px;line-height:1.65;word-break:break-word}
+  .error{color:#e57373!important;border-color:#4a1a1a!important;background:#1a0f0f!important}
+  .success{color:#66bb6a!important;border-color:#1e4d2a!important}
+
+  .progress-wrap{margin-top:6px;background:#0d1a12;border-radius:6px;overflow:hidden;height:6px;display:none}
+  .progress-bar{height:100%;background:linear-gradient(90deg,#25D366,#20be5b);width:0%;transition:width .4s;border-radius:6px}
+  .progress-label{display:flex;justify-content:space-between;font-size:9.5px;color:#3a6a4a;margin-top:3px}
+
+  .how-to{background:#0f2018;border:1px solid #1e3d2a;border-radius:7px;padding:10px;font-size:11.5px;color:#7abf8a;line-height:1.9}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="dot"></div>
+  <div>
+    <h1>WA Group Exporter v12</h1>
+    <p>Export chat unlimited · search · 1 file per chat</p>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="chat">💬 Export Chat</div>
+  <div class="tab" data-tab="member">👥 Member Grup</div>
+</div>
+
+<!-- TAB CHAT -->
+<div class="panel active" id="panel-chat">
+
+  <div class="label">Rentang Tanggal</div>
+  <div class="date-row">
+    <div><div style="font-size:9px;color:#4a7a5a;margin-bottom:3px">Dari</div><input type="date" id="dateFrom"></div>
+    <div><div style="font-size:9px;color:#4a7a5a;margin-bottom:3px">Sampai</div><input type="date" id="dateTo"></div>
+  </div>
+
+  <div class="label" style="margin-top:10px">🛡️ Safe Mode</div>
+  <div class="safe-row" id="safeToggleRow">
+    <span class="shield">🛡️</span>
+    <div class="info">
+      <strong>Safe Mode <span id="safeLabel">OFF</span></strong>
+      <span>Auto-pause 45d tiap 15 chat + delay acak antar chat</span>
+    </div>
+    <div class="toggle" id="safeToggle"></div>
+  </div>
+
+  <div class="label" style="margin-top:10px">Pilih Chat</div>
+  <button class="btn-load" id="btnLoadChats">🔄 Muat Semua Chat dari WhatsApp Web</button>
+
+  <div id="chatListContainer" style="display:none;margin-top:7px">
+    <!-- Search bar -->
+    <div class="search-wrap">
+      <span class="ico">🔍</span>
+      <input type="text" id="chatSearch" placeholder="Cari nama chat...">
+      <span class="search-count" id="searchCount"></span>
+    </div>
+    <!-- Chat list -->
+    <div class="chat-list-wrap">
+      <div class="select-all-row">
+        <input type="checkbox" id="checkAll" checked>
+        <span>Pilih Semua</span>
+      </div>
+      <div id="chatList"></div>
+    </div>
+  </div>
+
+  <div class="label" style="margin-top:10px">Format Export</div>
+  <select id="chatFormat">
+    <option value="csv">CSV (buka di Excel)</option>
+    <option value="html">HTML (buka di browser, lebih rapi)</option>
+  </select>
+
+  <div class="info-box">
+    📥 <strong>1 file per chat</strong> — didownload otomatis ke folder Download.<br>
+    📝 Nama file: <strong>NamaChat_tglAwal_tglAkhir.csv</strong>
+  </div>
+
+  <button class="btn btn-primary" id="btnExportChat">⬇ Export Chat Sekarang</button>
+  <button class="btn btn-pause"   id="btnPause">⏸ Pause</button>
+  <button class="btn btn-danger"  id="btnCancel">⛔ Batalkan</button>
+
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+  <div class="progress-label">
+    <span id="progressLeft"></span>
+    <span id="progressRight"></span>
+  </div>
+
+  <div id="status">Siap digunakan.</div>
+</div>
+
+<!-- TAB MEMBER -->
+<div class="panel" id="panel-member">
+  <div class="label">Cara Pakai</div>
+  <div class="how-to">
+    1️⃣ Buka WhatsApp Web<br>
+    2️⃣ Klik salah satu <strong>grup</strong><br>
+    3️⃣ Klik <strong>nama grup</strong> di atas → Info Grup terbuka<br>
+    4️⃣ Klik tombol export di bawah
+  </div>
+  <div class="label">Format Export</div>
+  <select id="memberFormat">
+    <option value="csv">CSV (Excel)</option>
+    <option value="vcf">VCard (.vcf)</option>
+  </select>
+  <button class="btn btn-primary"   id="btnExportMembers">👥 Export Member Grup Ini</button>
+  <button class="btn btn-secondary" id="btnExportAllGroups">📋 Export Semua Nama Grup</button>
+  <div id="statusMember">Siap digunakan.</div>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>
