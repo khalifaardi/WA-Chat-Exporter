@@ -1,0 +1,600 @@
+// tests/unit.test.js — Pure-function unit tests for WA Chat Exporter
+// Run: node tests/unit.test.js
+// These test the core business logic independently of Chrome APIs.
+
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const ROOT = path.join(__dirname, '..');
+
+let passed = 0, failed = 0;
+
+function test(name, fn) {
+  try {
+    fn();
+    passed++;
+    console.log('  PASS', name);
+  } catch (e) {
+    failed++;
+    console.log('  FAIL', name);
+    console.log('       ', e.message);
+  }
+}
+
+// ============================================================
+// Replicated pure functions from the codebase
+// ============================================================
+
+// From background.js
+function sanitize(n) {
+  return (n || 'chat').replace(/[\/\\:*?"<>|]/g, '').replace(/\s+/g, '_')
+    .substring(0, 80) || 'chat';
+}
+
+function toBase64(str) {
+  const b = new TextEncoder().encode(str);
+  let s = '';
+  for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+  return btoa(s);
+}
+
+function genCSV(msgs) {
+  let csv = '\uFEFFTimestamp,Sender,Message\n';
+  for (const m of msgs) {
+    const d = new Date(m.timestamp * 1000);
+    const t = d.toISOString().replace('T', ' ').substring(0, 19);
+    csv += t + ',"' + (m.sender || '').replace(/"/g, '""') + '","' + (m.body || '').replace(/"/g, '""') + '"\n';
+  }
+  return csv;
+}
+
+function genTXT(msgs) {
+  let txt = '', last = '';
+  for (const m of msgs) {
+    const d = new Date(m.timestamp * 1000);
+    const ds = String(d.getDate()).padStart(2, '0') + '/' +
+      String(d.getMonth() + 1).padStart(2, '0') + '/' +
+      String(d.getFullYear()).slice(-2);
+    const ts = String(d.getHours()).padStart(2, '0') + ':' +
+      String(d.getMinutes()).padStart(2, '0');
+    if (ds !== last) { txt += '\n[' + ds + ']\n'; last = ds; }
+    txt += '[' + ts + '] ' + (m.sender || '?') + ': ' + (m.body || '') + '\n';
+  }
+  return txt.trim();
+}
+
+function rand(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+// ============================================================
+// From inject/init.js — formatBody for media types
+// ============================================================
+function formatBody(msg) {
+  const caption = msg.caption || '';
+  const t = msg.type || '';
+
+  const mediaLabels = {
+    'image':            '[Image]',
+    'video':            '[Video]',
+    'sticker':          '[Sticker]',
+    'ptt':              '[Voice Message]',
+    'audio':            '[Audio]',
+    'document':         '[Document' + (msg.filename ? ' - ' + msg.filename : '') + ']',
+    'location':         '[Location]',
+    'vcard':            '[Contact]',
+    'multi_vcard':      '[Contacts]',
+    'poll_creation':    '[Poll]',
+    'event_creation':   '[Event]',
+    'call_log':         '[Call]',
+    'revoked':          '[Message deleted]',
+    'gp2':              '[Group action]',
+    'notification':     '[Notification]',
+    'ephemeral':        '[Disappearing message]',
+    'ciphertext':       '[Encrypted message]',
+    'order':            '[Order]',
+    'product':          '[Product]',
+    'catalog':          '[Catalog]',
+    'list':             '[List]',
+    'list_response':    '[List response]',
+    'buttons_response': '[Button response]',
+    'payment':          '[Payment]',
+    'reaction':         '[Reaction]',
+    'hsm':              '[Template message]',
+    'protocol':         msg.subtype === 'message_edit' ? '[Edited message]' : '[System message]'
+  };
+
+  const label = mediaLabels[t] || null;
+  if (label && caption) return label + ' ' + caption;
+  if (label) return label;
+  if (caption) return caption;
+  return msg.body || '';
+}
+
+// ============================================================
+// Message filtering helper (from init.js getMessages)
+// ============================================================
+function filterMessagesByDate(messages, dateFrom, dateTo) {
+  const fromMs = new Date(dateFrom).getTime() / 1000;
+  const toMs = new Date(dateTo + 'T23:59:59').getTime() / 1000;
+  return messages.filter(msg => {
+    const ts = msg.t || msg.timestamp;
+    return ts && ts >= fromMs && ts <= toMs;
+  });
+}
+
+// ============================================================
+// Chat sorting by last message timestamp (from init.js getChats)
+// ============================================================
+function sortChatsByLastMsg(chats) {
+  return [...chats].sort((a, b) => (b.t || 0) - (a.t || 0));
+}
+
+// ============================================================
+// PRE-FLIGHT: Syntax check on ALL source files
+// ============================================================
+console.log('\n=== PRE-FLIGHT SYNTAX CHECK ===');
+const sourceFiles = [
+  'manifest.json',
+  'background.js',
+  'content-script.js',
+  'popup.js',
+  'inject/init.js',
+  '_locales/en/messages.json',
+  '_locales/id/messages.json',
+];
+for (const f of sourceFiles) {
+  const fp = path.join(ROOT, f);
+  if (!fs.existsSync(fp)) {
+    console.log('  FAIL', f, '— FILE MISSING');
+    failed++;
+    continue;
+  }
+  const src = fs.readFileSync(fp, 'utf8');
+  if (f.endsWith('.json')) {
+    try { JSON.parse(src); console.log('  PASS', f); passed++; }
+    catch (e) { console.log('  FAIL', f, '—', e.message); failed++; }
+  } else if (f.endsWith('.js')) {
+    try { new Function(src); console.log('  PASS', f); passed++; }
+    catch (e) { console.log('  FAIL', f, '—', e.message); failed++; }
+  }
+}
+
+if (failed > 0) {
+  console.log('\nSYNTAX ERRORS DETECTED — aborting further tests');
+  process.exit(1);
+}
+
+// ============================================================
+// TESTS — sanitize()
+// ============================================================
+console.log('\n=== sanitize() ===');
+
+test('normal chat name', () => {
+  assert.strictEqual(sanitize('My Chat'), 'My_Chat');
+});
+
+test('spaces collapse to underscores', () => {
+  const result = sanitize('Team  Rocket  Chat');
+  // \s+ collapses consecutive spaces into single _
+  assert.strictEqual(result, 'Team_Rocket_Chat');
+});
+
+test('special chars replaced with underscores', () => {
+  const result = sanitize('Chat: "Hello" / World?');
+  assert.ok(!result.includes(':'), 'colon removed');
+  assert.ok(!result.includes('"'), 'quotes removed');
+  assert.ok(!result.includes('/'), 'slash removed');
+  assert.ok(!result.includes('?'), 'question removed');
+  assert.ok(result.includes('Hello'), 'Hello preserved');
+  assert.ok(result.includes('World'), 'World preserved');
+});
+
+test('backslash and pipe removed', () => {
+  assert.strictEqual(sanitize('A\\B|C'), 'ABC');
+});
+
+test('truncates to 80 chars', () => {
+  const long = 'A'.repeat(100);
+  assert.strictEqual(sanitize(long).length, 80);
+});
+
+test('empty name defaults to "chat"', () => {
+  assert.strictEqual(sanitize(''), 'chat');
+});
+
+test('null name defaults to "chat"', () => {
+  assert.strictEqual(sanitize(null), 'chat');
+});
+
+test('unicode emoji preserved', () => {
+  const result = sanitize('Team 🚀');
+  assert.ok(result.includes('Team'));
+  assert.ok(!result.includes('/'));
+});
+
+// ============================================================
+// TESTS — toBase64()
+// ============================================================
+console.log('\n=== toBase64() ===');
+
+test('simple string', () => {
+  assert.strictEqual(toBase64('hello'), 'aGVsbG8=');
+});
+
+test('empty string', () => {
+  assert.strictEqual(toBase64(''), '');
+});
+
+test('unicode (BOM for CSV)', () => {
+  const result = toBase64('\uFEFFHello');
+  assert.ok(result.length > 0);
+});
+
+// ============================================================
+// TESTS — genCSV()
+// ============================================================
+console.log('\n=== genCSV() ===');
+
+test('single message', () => {
+  const msgs = [{ timestamp: 1700000000, sender: 'Alice', body: 'Hello world' }];
+  const csv = genCSV(msgs);
+  assert.ok(csv.startsWith('\uFEFF'), 'has BOM');
+  assert.ok(csv.includes('Alice'), 'has sender');
+  assert.ok(csv.includes('Hello world'), 'has body');
+  assert.ok(csv.includes('2023-11'), 'has date');
+});
+
+test('empty messages produces header only', () => {
+  const csv = genCSV([]);
+  assert.strictEqual(csv, '\uFEFFTimestamp,Sender,Message\n');
+});
+
+test('escapes double quotes in text', () => {
+  const msgs = [{ timestamp: 1700000000, sender: 'A "Bot"', body: 'He said "hi"' }];
+  const csv = genCSV(msgs);
+  assert.ok(csv.includes('A ""Bot""'), 'sender quotes escaped');
+  assert.ok(csv.includes('He said ""hi""'), 'body quotes escaped');
+});
+
+test('messages appear in given order (no internal sort)', () => {
+  // genCSV does NOT sort — sorting is done upstream in inject/init.js
+  const msgs = [
+    { timestamp: 1700000001, sender: 'Alice', body: 'First' },
+    { timestamp: 1700000002, sender: 'Bob', body: 'Later' },
+  ];
+  const csv = genCSV(msgs);
+  const lines = csv.split('\n');
+  assert.ok(lines[1].includes('Alice') && lines[2].includes('Bob'), 'order preserved as given');
+});
+
+test('handles null sender/body', () => {
+  const msgs = [{ timestamp: 1700000000, sender: null, body: null }];
+  const csv = genCSV(msgs);
+  assert.ok(csv.includes(',"",""'), 'empty fields quoted');
+});
+
+// ============================================================
+// TESTS — genTXT()
+// ============================================================
+console.log('\n=== genTXT() ===');
+
+test('single message with date header', () => {
+  // Use noon UTC so the date is same across most timezones
+  // 2023-06-15 12:00:00 UTC = 1686830400
+  const msgs = [{ timestamp: 1686830400, sender: 'Alice', body: 'Hello' }];
+  const txt = genTXT(msgs);
+  // genTXT trims the result, so leading \n is removed
+  assert.ok(txt.match(/^\[\d{2}\/\d{2}\/\d{2}\]/), 'starts with date header: ' + txt.substring(0, 20));
+  assert.ok(txt.includes('Hello'), 'has body');
+});
+
+test('same day groups under one date', () => {
+  const noon = 1686830400; // 2023-06-15 12:00 UTC
+  const msgs = [
+    { timestamp: noon,      sender: 'Alice', body: 'First' },
+    { timestamp: noon + 60, sender: 'Bob',   body: 'Second' },
+  ];
+  const txt = genTXT(msgs);
+  const dateCount = (txt.match(/\[\d{2}\/\d{2}\/\d{2}\]/g) || []).length;
+  assert.strictEqual(dateCount, 1, 'only one date header');
+});
+
+test('different days get separate headers', () => {
+  const noon = 1686830400; // 2023-06-15 12:00 UTC
+  const nextDay = noon + 86400;
+  const msgs = [
+    { timestamp: noon,    sender: 'Alice', body: 'Day 1' },
+    { timestamp: nextDay, sender: 'Bob',   body: 'Day 2' },
+  ];
+  const txt = genTXT(msgs);
+  const dateCount = (txt.match(/\[\d{2}\/\d{2}\/\d{2}\]/g) || []).length;
+  assert.strictEqual(dateCount, 2, 'two date headers');
+});
+
+test('null sender shows "?"', () => {
+  const noon = 1686830400;
+  const msgs = [{ timestamp: noon, sender: null, body: 'Test' }];
+  const txt = genTXT(msgs);
+  assert.ok(txt.includes('?: Test'), 'null sender -> ?');
+});
+
+// ============================================================
+// TESTS — formatBody() media types
+// ============================================================
+console.log('\n=== formatBody() ===');
+
+test('plain text passes through', () => {
+  const msg = { body: 'Hello', type: 'chat' };
+  assert.strictEqual(formatBody(msg), 'Hello');
+});
+
+test('image without caption', () => {
+  const msg = { body: '', type: 'image' };
+  assert.strictEqual(formatBody(msg), '[Image]');
+});
+
+test('image with caption', () => {
+  const msg = { body: '', type: 'image', caption: 'Check this out' };
+  assert.strictEqual(formatBody(msg), '[Image] Check this out');
+});
+
+test('video', () => {
+  const msg = { body: '', type: 'video' };
+  assert.strictEqual(formatBody(msg), '[Video]');
+});
+
+test('sticker', () => {
+  const msg = { type: 'sticker' };
+  assert.strictEqual(formatBody(msg), '[Sticker]');
+});
+
+test('voice message (ptt)', () => {
+  const msg = { type: 'ptt' };
+  assert.strictEqual(formatBody(msg), '[Voice Message]');
+});
+
+test('audio', () => {
+  const msg = { type: 'audio' };
+  assert.strictEqual(formatBody(msg), '[Audio]');
+});
+
+test('document without filename', () => {
+  const msg = { type: 'document' };
+  assert.strictEqual(formatBody(msg), '[Document]');
+});
+
+test('document with filename', () => {
+  const msg = { type: 'document', filename: 'report.pdf' };
+  assert.strictEqual(formatBody(msg), '[Document - report.pdf]');
+});
+
+test('location', () => {
+  const msg = { type: 'location' };
+  assert.strictEqual(formatBody(msg), '[Location]');
+});
+
+test('contact (vcard)', () => {
+  const msg = { type: 'vcard' };
+  assert.strictEqual(formatBody(msg), '[Contact]');
+});
+
+test('poll', () => {
+  const msg = { type: 'poll_creation' };
+  assert.strictEqual(formatBody(msg), '[Poll]');
+});
+
+test('event', () => {
+  const msg = { type: 'event_creation' };
+  assert.strictEqual(formatBody(msg), '[Event]');
+});
+
+test('call log', () => {
+  const msg = { type: 'call_log' };
+  assert.strictEqual(formatBody(msg), '[Call]');
+});
+
+test('revoked message', () => {
+  const msg = { type: 'revoked' };
+  assert.strictEqual(formatBody(msg), '[Message deleted]');
+});
+
+test('group action', () => {
+  const msg = { type: 'gp2' };
+  assert.strictEqual(formatBody(msg), '[Group action]');
+});
+
+test('notification', () => {
+  const msg = { type: 'notification' };
+  assert.strictEqual(formatBody(msg), '[Notification]');
+});
+
+test('disappearing message', () => {
+  const msg = { type: 'ephemeral' };
+  assert.strictEqual(formatBody(msg), '[Disappearing message]');
+});
+
+test('encrypted message', () => {
+  const msg = { type: 'ciphertext' };
+  assert.strictEqual(formatBody(msg), '[Encrypted message]');
+});
+
+test('order', () => {
+  const msg = { type: 'order' };
+  assert.strictEqual(formatBody(msg), '[Order]');
+});
+
+test('payment', () => {
+  const msg = { type: 'payment' };
+  assert.strictEqual(formatBody(msg), '[Payment]');
+});
+
+test('reaction', () => {
+  const msg = { type: 'reaction' };
+  assert.strictEqual(formatBody(msg), '[Reaction]');
+});
+
+test('template message', () => {
+  const msg = { type: 'hsm' };
+  assert.strictEqual(formatBody(msg), '[Template message]');
+});
+
+test('edited message', () => {
+  const msg = { type: 'protocol', subtype: 'message_edit' };
+  assert.strictEqual(formatBody(msg), '[Edited message]');
+});
+
+test('other protocol', () => {
+  const msg = { type: 'protocol', subtype: 'something_else' };
+  assert.strictEqual(formatBody(msg), '[System message]');
+});
+
+test('list', () => {
+  const msg = { type: 'list' };
+  assert.strictEqual(formatBody(msg), '[List]');
+});
+
+test('list response', () => {
+  const msg = { type: 'list_response' };
+  assert.strictEqual(formatBody(msg), '[List response]');
+});
+
+test('button response', () => {
+  const msg = { type: 'buttons_response' };
+  assert.strictEqual(formatBody(msg), '[Button response]');
+});
+
+test('product', () => {
+  const msg = { type: 'product' };
+  assert.strictEqual(formatBody(msg), '[Product]');
+});
+
+test('catalog', () => {
+  const msg = { type: 'catalog' };
+  assert.strictEqual(formatBody(msg), '[Catalog]');
+});
+
+test('unknown type returns body', () => {
+  const msg = { body: 'Custom content', type: 'unknown_type_xyz' };
+  assert.strictEqual(formatBody(msg), 'Custom content');
+});
+
+test('unknown type without body returns empty', () => {
+  const msg = { type: 'unknown_type_xyz' };
+  assert.strictEqual(formatBody(msg), '');
+});
+
+test('caption only, no body, no type match, no label', () => {
+  const msg = { caption: 'Just a caption', type: 'unknown' };
+  assert.strictEqual(formatBody(msg), 'Just a caption');
+});
+
+// ============================================================
+// TESTS — filterMessagesByDate()
+// ============================================================
+console.log('\n=== filterMessagesByDate() ===');
+
+test('in range', () => {
+  // Use UTC-safe timestamps to avoid timezone interpretation issues
+  // 2023-06-15 12:00:00 UTC = 1686830400
+  const jun15 = 1686830400;
+  const jun16 = jun15 + 86400;
+  const msgs = [
+    { t: jun15 },
+    { t: jun15 + 3600 },
+    { t: jun16 },
+  ];
+  const result = filterMessagesByDate(msgs, '2023-06-15', '2023-06-16');
+  assert.strictEqual(result.length, 3);
+});
+
+test('out of range before', () => {
+  const msgs = [{ t: 1699000000 }]; // before range
+  const result = filterMessagesByDate(msgs, '2023-11-14', '2023-11-16');
+  assert.strictEqual(result.length, 0);
+});
+
+test('out of range after', () => {
+  const msgs = [{ t: 1800000000 }]; // after range
+  const result = filterMessagesByDate(msgs, '2023-11-14', '2023-11-16');
+  assert.strictEqual(result.length, 0);
+});
+
+test('boundary — exactly at start of day', () => {
+  const fromMs = new Date('2023-11-14').getTime() / 1000;
+  const msgs = [{ t: fromMs }];
+  const result = filterMessagesByDate(msgs, '2023-11-14', '2023-11-14');
+  assert.strictEqual(result.length, 1, 'message at 00:00:00 of start date included');
+});
+
+test('boundary — end of day', () => {
+  const endOfDay = new Date('2023-11-14T23:59:59').getTime() / 1000;
+  const msgs = [{ t: endOfDay }];
+  const result = filterMessagesByDate(msgs, '2023-11-14', '2023-11-14');
+  assert.strictEqual(result.length, 1, 'message at 23:59:59 of end date included');
+});
+
+test('no timestamp filtered out', () => {
+  const msgs = [{ body: 'no timestamp' }];
+  const result = filterMessagesByDate(msgs, '2023-11-14', '2023-11-16');
+  assert.strictEqual(result.length, 0);
+});
+
+// ============================================================
+// TESTS — sortChatsByLastMsg()
+// ============================================================
+console.log('\n=== sortChatsByLastMsg() ===');
+
+test('newest first', () => {
+  const chats = [
+    { name: 'Old', t: 1000 },
+    { name: 'New', t: 3000 },
+    { name: 'Mid', t: 2000 },
+  ];
+  const sorted = sortChatsByLastMsg(chats);
+  assert.strictEqual(sorted[0].name, 'New');
+  assert.strictEqual(sorted[1].name, 'Mid');
+  assert.strictEqual(sorted[2].name, 'Old');
+});
+
+test('no timestamp goes last', () => {
+  const chats = [
+    { name: 'NoDate' },
+    { name: 'HasDate', t: 1000 },
+  ];
+  const sorted = sortChatsByLastMsg(chats);
+  assert.strictEqual(sorted[0].name, 'HasDate');
+  assert.strictEqual(sorted[1].name, 'NoDate');
+});
+
+test('does not mutate original', () => {
+  const chats = [{ name: 'A', t: 100 }, { name: 'B', t: 200 }];
+  const sorted = sortChatsByLastMsg(chats);
+  assert.strictEqual(chats[0].name, 'A', 'original order preserved');
+  assert.strictEqual(sorted[0].name, 'B');
+});
+
+// ============================================================
+// TESTS — rand()
+// ============================================================
+console.log('\n=== rand() ===');
+
+test('returns within range', () => {
+  for (let i = 0; i < 100; i++) {
+    const r = rand(4000, 8000);
+    assert.ok(r >= 4000 && r <= 8000, r + ' out of range');
+  }
+});
+
+// ============================================================
+// RESULTS
+// ============================================================
+console.log('\n' + '='.repeat(40));
+console.log(passed + ' passed, ' + failed + ' failed, ' + (passed + failed) + ' total');
+console.log('='.repeat(40));
+
+if (failed > 0) process.exit(1);

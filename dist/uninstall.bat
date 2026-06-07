@@ -1,0 +1,5 @@
+@echo off
+title WA Chat Exporter - Uninstall
+echo Removing WA Chat Exporter...
+powershell -ExecutionPolicy Bypass -Command "$id='boecjoljbbpohhleiaoefnjdflkcfdmh'; $prefs='%LOCALAPPDATA%\Google\Chrome\User Data\Default\Preferences'; $dir='%USERPROFILE%\WA-Chat-Exporter'; Write-Host 'Removing extension registration...'; if (Test-Path $prefs) { try { $j=Get-Content $prefs -Raw -Encoding UTF8 | ConvertFrom-Json -Depth 100; if ($j.extensions.settings.$id) { $j.extensions.settings.PSObject.Properties.Remove($id); [System.IO.File]::WriteAllText($prefs, ($j | ConvertTo-Json -Depth 100 -Compress), [System.Text.UTF8Encoding]::new($false)); Write-Host ' Registration removed.' -ForegroundColor Green } } catch { Write-Host ' Could not update Chrome settings.' -ForegroundColor Yellow } }; Write-Host 'Removing files...'; if (Test-Path $dir) { Remove-Item -Recurse -Force $dir; Write-Host ' Files removed.' -ForegroundColor Green } else { Write-Host ' No files found.' }; Write-Host ''; Write-Host 'Done! Close all Chrome windows and reopen for changes to take effect.' -ForegroundColor Green"
+pause

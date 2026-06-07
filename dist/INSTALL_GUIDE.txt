@@ -1,0 +1,75 @@
+======================================================================
+  WA CHAT EXPORTER — Installation Guide
+  Panduan Instalasi
+======================================================================
+
+
+██████████████████████████████████████████████████████████████████
+  ENGLISH
+██████████████████████████████████████████████████████████████████
+
+WHAT YOU NEED:
+  - A Windows computer (Windows 10 or newer)
+  - Google Chrome browser installed
+  - The WhatsApp account logged in on your phone (for QR scan)
+
+HOW TO INSTALL (2 steps):
+
+  Step 1 — Double-click the file named "install.bat"
+
+  Step 2 — If Chrome is open, close ALL Chrome windows, then
+           press ENTER in the black window that appears.
+
+  That's it! Open Chrome normally — the extension is ready.
+
+  If you don't see the green dot icon in the toolbar:
+    - Click the puzzle icon 🧩 (Extensions) in Chrome's top-right
+    - Find "WA Chat Exporter" and click the pin 📌 icon
+
+
+HOW TO UNINSTALL:
+
+  Step 1 — Double-click the file named "uninstall.bat"
+  Step 2 — Close Chrome, reopen — the extension is removed
+
+
+QUESTIONS?
+  Contact your IT team or supervisor for help.
+
+
+██████████████████████████████████████████████████████████████████
+  BAHASA INDONESIA
+██████████████████████████████████████████████████████████████████
+
+YANG DIBUTUHKAN:
+  - Komputer Windows (Windows 10 atau lebih baru)
+  - Google Chrome sudah terpasang
+  - Akun WhatsApp sudah login di ponsel Anda (untuk pindai QR)
+
+CARA INSTAL (2 langkah):
+
+  Langkah 1 — Klik dua kali file bernama "install.bat"
+
+  Langkah 2 — Jika Chrome sedang terbuka, TUTUP SEMUA jendela
+              Chrome, lalu tekan ENTER di jendela hitam yang muncul.
+
+  Selesai! Buka Chrome seperti biasa — ekstensi sudah siap.
+
+  Jika ikon bulat hijau tidak muncul di toolbar:
+    - Klik ikon puzzle 🧩 (Extensions) di kanan atas Chrome
+    - Cari "WA Chat Exporter" dan klik pin 📌
+
+
+CARA MENGHAPUS:
+
+  Langkah 1 — Klik dua kali file bernama "uninstall.bat"
+  Langkah 2 — Tutup Chrome, buka kembali — ekstensi terhapus
+
+
+PERTANYAAN?
+  Hubungi tim IT atau supervisor Anda untuk bantuan.
+
+
+======================================================================
+  Version 13.0 — June 2026
+======================================================================
