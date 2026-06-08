@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a3a2a"/>
+      <stop offset="100%" stop-color="#0d2118"/>
+    </linearGradient>
+  </defs>
+  <!-- Background circle -->
+  <circle cx="64" cy="64" r="61" fill="url(#bg)" stroke="#25D366" stroke-width="6"/>
+  <!-- Download arrow -->
+  <g transform="translate(64,58)" fill="none" stroke="#25D366" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Arrow vertical line -->
+    <line x1="0" y1="-28" x2="0" y2="16"/>
+    <!-- Arrow head -->
+    <polyline points="-12,6 0,16 12,6"/>
+  </g>
+  <!-- Tray bottom -->
+  <line x1="36" y1="78" x2="92" y2="78" stroke="#25D366" stroke-width="5" stroke-linecap="round"/>
+  <!-- Small export dots -->
+  <circle cx="28" cy="78" r="4" fill="#25D366"/>
+  <circle cx="100" cy="78" r="4" fill="#25D366"/>
+</svg>

@@ -160,7 +160,7 @@ async function startExport(settings) {
         totalMessages += msgs.length; downloadedFiles++;
         const rangeLabel = dateFrom === "1970-01-01" ? "All_Time" : dateFrom + "_" + dateTo;
         const fn = exportFolder + sanitize(chat.name) + "_" + rangeLabel + "." + (format === "csv" ? "csv" : "txt");
-        const content = format === "csv" ? genCSV(msgs) : genTXT(msgs);
+        const content = format === "csv" ? genCSV(msgs, chat) : genTXT(msgs, chat);
         const mime = format === "csv" ? "text/csv;charset=utf-8" : "text/plain;charset=utf-8";
         const url = "data:" + mime + ";base64," + toBase64(content);
         await new Promise(res => chrome.downloads.download({ url, filename: fn, saveAs: false }, () => res()));
@@ -204,8 +204,14 @@ async function startExport(settings) {
   }
 }
 
-function genCSV(msgs) {
-  let csv = "\uFEFFTimestamp,Sender,Message\n";
+function genCSV(msgs, chat) {
+  // Build header with phone if individual chat
+  let header = '# Chat: ' + (chat.name || 'Unknown');
+  if (chat && chat.id && !chat.isGroup) {
+    const phone = chat.id.split('@')[0];
+    if (phone && /^\d+$/.test(phone)) header += ' | Phone: ' + phone;
+  }
+  let csv = '\uFEFF' + header + '\nTimestamp,Sender,Message\n';
   for (const m of msgs) {
     const d = new Date(m.timestamp*1000);
     const t = d.toISOString().replace("T"," ").substring(0,19);
@@ -214,8 +220,15 @@ function genCSV(msgs) {
   return csv;
 }
 
-function genTXT(msgs) {
-  let txt = "", last = "";
+function genTXT(msgs, chat) {
+  // Build header with phone if individual chat
+  let header = '# Chat: ' + (chat.name || 'Unknown');
+  if (chat && chat.id && !chat.isGroup) {
+    const phone = chat.id.split('@')[0];
+    if (phone && /^\d+$/.test(phone)) header += ' | Phone: ' + phone;
+  }
+  let txt = header + '\n';
+  let last = '';
   for (const m of msgs) {
     const d = new Date(m.timestamp*1000);
     const ds = String(d.getDate()).padStart(2,"0")+"/"+String(d.getMonth()+1).padStart(2,"0")+"/"+String(d.getFullYear()).slice(-2);
