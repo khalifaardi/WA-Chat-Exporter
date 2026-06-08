@@ -9,32 +9,48 @@
 ██████████████████████████████████████████████████████████████████
 
 WHAT YOU NEED:
-  - A Windows computer (Windows 10 or newer)
   - Google Chrome browser installed
   - The WhatsApp account logged in on your phone (for QR scan)
 
-HOW TO INSTALL (2 steps):
+── WINDOWS ──────────────────────────────────────────────────────
 
-  Step 1 — Double-click the file named "install.bat"
+  HOW TO INSTALL (2 steps):
 
-  Step 2 — If Chrome is open, close ALL Chrome windows, then
-           press ENTER in the black window that appears.
+    Step 1 — Double-click "install.bat"
 
-  That's it! Open Chrome normally — the extension is ready.
+    Step 2 — If Chrome is open, close ALL Chrome windows, then
+             press ENTER in the black window that appears.
 
-  If you don't see the green dot icon in the toolbar:
+    Done! Open Chrome — the extension is ready.
+
+  HOW TO UNINSTALL:
+
+    Step 1 — Double-click "uninstall.bat"
+    Step 2 — Close Chrome, reopen — the extension is removed.
+
+── MAC ──────────────────────────────────────────────────────────
+
+  HOW TO INSTALL (2 steps):
+
+    Step 1 — Double-click "install.command"
+
+    Step 2 — If Chrome is open, quit Chrome (Cmd+Q), then
+             press ENTER in the Terminal window that appears.
+
+    Done! Open Chrome — the extension is ready.
+
+  HOW TO UNINSTALL:
+
+    Step 1 — Open Terminal, drag "uninstall.sh" into it, press Enter
+    Step 2 — Close Chrome, reopen — the extension is removed.
+
+── TROUBLESHOOTING ──────────────────────────────────────────────
+
+  If the green dot icon doesn't appear in the toolbar:
     - Click the puzzle icon 🧩 (Extensions) in Chrome's top-right
     - Find "WA Chat Exporter" and click the pin 📌 icon
 
-
-HOW TO UNINSTALL:
-
-  Step 1 — Double-click the file named "uninstall.bat"
-  Step 2 — Close Chrome, reopen — the extension is removed
-
-
-QUESTIONS?
-  Contact your IT team or supervisor for help.
+  QUESTIONS? Contact your IT team or supervisor for help.
 
 
 ██████████████████████████████████████████████████████████████████
@@ -42,32 +58,48 @@ QUESTIONS?
 ██████████████████████████████████████████████████████████████████
 
 YANG DIBUTUHKAN:
-  - Komputer Windows (Windows 10 atau lebih baru)
   - Google Chrome sudah terpasang
   - Akun WhatsApp sudah login di ponsel Anda (untuk pindai QR)
 
-CARA INSTAL (2 langkah):
+── WINDOWS ──────────────────────────────────────────────────────
 
-  Langkah 1 — Klik dua kali file bernama "install.bat"
+  CARA INSTAL (2 langkah):
 
-  Langkah 2 — Jika Chrome sedang terbuka, TUTUP SEMUA jendela
-              Chrome, lalu tekan ENTER di jendela hitam yang muncul.
+    Langkah 1 — Klik dua kali "install.bat"
 
-  Selesai! Buka Chrome seperti biasa — ekstensi sudah siap.
+    Langkah 2 — Jika Chrome terbuka, TUTUP SEMUA jendela Chrome,
+                lalu tekan ENTER di jendela hitam yang muncul.
+
+    Selesai! Buka Chrome — ekstensi sudah siap.
+
+  CARA MENGHAPUS:
+
+    Langkah 1 — Klik dua kali "uninstall.bat"
+    Langkah 2 — Tutup Chrome, buka kembali — ekstensi terhapus.
+
+── MAC ──────────────────────────────────────────────────────────
+
+  CARA INSTAL (2 langkah):
+
+    Langkah 1 — Klik dua kali "install.command"
+
+    Langkah 2 — Jika Chrome terbuka, tutup Chrome (Cmd+Q), lalu
+                tekan ENTER di jendela Terminal yang muncul.
+
+    Selesai! Buka Chrome — ekstensi sudah siap.
+
+  CARA MENGHAPUS:
+
+    Langkah 1 — Buka Terminal, seret "uninstall.sh" ke dalamnya, tekan Enter
+    Langkah 2 — Tutup Chrome, buka kembali — ekstensi terhapus.
+
+── MENGATASI MASALAH ────────────────────────────────────────────
 
   Jika ikon bulat hijau tidak muncul di toolbar:
     - Klik ikon puzzle 🧩 (Extensions) di kanan atas Chrome
     - Cari "WA Chat Exporter" dan klik pin 📌
 
-
-CARA MENGHAPUS:
-
-  Langkah 1 — Klik dua kali file bernama "uninstall.bat"
-  Langkah 2 — Tutup Chrome, buka kembali — ekstensi terhapus
-
-
-PERTANYAAN?
-  Hubungi tim IT atau supervisor Anda untuk bantuan.
+  PERTANYAAN? Hubungi tim IT atau supervisor Anda.
 
 
 ======================================================================

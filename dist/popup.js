@@ -44,6 +44,8 @@ const I18N = {
     loginDesc:        "Buka WhatsApp Web, pindai kode QR dengan ponsel Anda, lalu kembali ke sini.",
     btnOpenWA:        "Buka WhatsApp Web",
     btnCheckAgain:    "Cek Lagi",
+    injectFailed:     "WhatsApp Web mungkin telah diperbarui. Muat ulang tab WhatsApp dan coba lagi.",
+    statusSessionExpired: "Sesi WhatsApp berakhir. Muat ulang WhatsApp Web dan login kembali.",
   },
   en: {
     sectionLang:      "Language",
@@ -80,6 +82,8 @@ const I18N = {
     loginDesc:        "Open WhatsApp Web, scan the QR code with your phone, then come back.",
     btnOpenWA:        "Open WhatsApp Web",
     btnCheckAgain:    "Check Again",
+    injectFailed:     "WhatsApp Web may have been updated. Reload the WhatsApp tab and try again.",
+    statusSessionExpired: "WhatsApp session expired. Reload WhatsApp Web and log in again.",
   }
 };
 
@@ -334,9 +338,17 @@ async function loadChats() {
     D("tooLong").style.display = "none";
     if (chrome.runtime.lastError || (r && r.error)) {
       const errMsg = (r && r.error) || (chrome.runtime.lastError && chrome.runtime.lastError.message) || "";
-      // If error indicates not logged in / not ready, show login wall
+      // If error indicates not logged in / not ready, check if WA tab exists
       if (/not ready|not open|timed out/i.test(errMsg)) {
-        showLoginPrompt(true);
+        chrome.tabs.query({ url: "https://web.whatsapp.com/*" }, (tabs) => {
+          if (tabs.length) {
+            // WA tab exists but content script failed to inject → likely WA update
+            D("tooLongMsg").textContent = T('injectFailed');
+            D("tooLong").style.display = "";
+          } else {
+            showLoginPrompt(true);
+          }
+        });
         return;
       }
       D("dropdownLabel").textContent = T('failed');
@@ -448,9 +460,17 @@ async function checkStatus() {
       D("status").className = "";
       D("progressWrap").style.display = "";
       D("progressBar").style.width = (p.percent || 0) + "%";
-      D("progressLeft").textContent = (p.done||0) + "/" + (p.total||0) + " chats";
+      D("progressLeft").textContent = (p.currentChatName ? p.currentChatName + " — " : "") + (p.done||0) + "/" + (p.total||0) + " chats";
       D("progressRight").textContent = (p.downloadedFiles||0) + " files";
       D("btnPause").textContent = isPaused ? T('btnResume') : T('btnPause');
+    } else if (p.status === "session_expired") {
+      isRunning = false;
+      updateUI("done");
+      D("status").style.display = "";
+      D("progressWrap").style.display = "";
+      D("status").textContent = T('statusSessionExpired');
+      D("status").className = "error";
+      D("btnPause").textContent = T('btnPause');
     } else if (p.status === "done" || p.status === "cancelled" || p.status === "error") {
       updateUI("done");
       D("status").style.display = "";

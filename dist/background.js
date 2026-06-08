@@ -152,7 +152,7 @@ async function startExport(settings) {
     const chat = chats[i];
     const chatLabel = (i+1) + "/" + chats.length;
     sendToWAOverlay({ text: chat.name, subText: "Chat " + chatLabel, percent: Math.round(i/chats.length*100), extra: downloadedFiles + " files saved" });
-    updateProgress({ text: "[" + chatLabel + "] " + chat.name, percent: Math.round(i/chats.length*100), done: i, total: chats.length });
+    updateProgress({ text: "[" + chatLabel + "] " + chat.name, currentChatName: chat.name, percent: Math.round(i/chats.length*100), done: i, total: chats.length });
 
     try {
       const msgs = await sendToWA({ action: "GET_MESSAGES", data: { chatId: chat.id, from: dateFrom, to: dateTo } });
@@ -164,13 +164,21 @@ async function startExport(settings) {
         const mime = format === "csv" ? "text/csv;charset=utf-8" : "text/plain;charset=utf-8";
         const url = "data:" + mime + ";base64," + toBase64(content);
         await new Promise(res => chrome.downloads.download({ url, filename: fn, saveAs: false }, () => res()));
-        updateProgress({ text: "[" + chatLabel + "] " + chat.name + ": " + msgs.length + " msgs", percent: Math.round((i+1)/chats.length*100), done: i+1, total: chats.length, downloadedFiles });
+        updateProgress({ text: "[" + chatLabel + "] " + chat.name + ": " + msgs.length + " msgs", currentChatName: chat.name, percent: Math.round((i+1)/chats.length*100), done: i+1, total: chats.length, downloadedFiles });
       } else {
-        updateProgress({ text: "[" + chatLabel + "] " + chat.name + ": 0 msgs", percent: Math.round((i+1)/chats.length*100), done: i+1, total: chats.length });
+        updateProgress({ text: "[" + chatLabel + "] " + chat.name + ": 0 msgs", currentChatName: chat.name, percent: Math.round((i+1)/chats.length*100), done: i+1, total: chats.length });
       }
     } catch (e) {
+      const errStr = (e.message || "").toLowerCase();
+      // Detect session/auth expired — stop entire export
+      if (/not logged|session expired|auth|unauthorized|not ready/i.test(errStr) && isRunning) {
+        isRunning = false; isPaused = false;
+        updateProgress({ status: "session_expired", text: "Session expired: " + (e.message || ""), currentChatName: chat.name, percent: Math.round((i+1)/chats.length*100), done: i+1, total: chats.length });
+        sendToWAOverlay({ hide: true });
+        return;
+      }
       failedChats.push({ name: chat.name, error: e.message });
-      updateProgress({ text: "[" + chatLabel + "] " + chat.name + ": FAILED", percent: Math.round((i+1)/chats.length*100), done: i+1 });
+      updateProgress({ text: "[" + chatLabel + "] " + chat.name + ": FAILED", currentChatName: chat.name, percent: Math.round((i+1)/chats.length*100), done: i+1 });
     }
 
     // Delay between chats (Safe Mode)
