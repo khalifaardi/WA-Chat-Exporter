@@ -1,107 +1,17 @@
-======================================================================
-  WA CHAT EXPORTER — Installation Guide
-  Panduan Instalasi
-======================================================================
+﻿WA CHAT EXPORTER - Installation Guide / Panduan Instalasi
 
+=== ENGLISH ===
 
-██████████████████████████████████████████████████████████████████
-  ENGLISH
-██████████████████████████████████████████████████████████████████
+WINDOWS: Double-click install.bat. Close Chrome if open, press Enter.
+MAC: Double-click install.command. Quit Chrome (Cmd+Q), press Enter.
 
-WHAT YOU NEED:
-  - Google Chrome browser installed
-  - The WhatsApp account logged in on your phone (for QR scan)
+If icon not visible: click puzzle icon in Chrome toolbar, pin WA Chat Exporter.
 
-── WINDOWS ──────────────────────────────────────────────────────
+=== BAHASA INDONESIA ===
 
-  HOW TO INSTALL (2 steps):
+WINDOWS: Klik dua kali install.bat. Tutup Chrome jika terbuka, tekan Enter.
+MAC: Klik dua kali install.command. Tutup Chrome (Cmd+Q), tekan Enter.
 
-    Step 1 — Double-click "install.bat"
+Jika ikon tidak terlihat: klik ikon puzzle di toolbar Chrome, pin WA Chat Exporter.
 
-    Step 2 — If Chrome is open, close ALL Chrome windows, then
-             press ENTER in the black window that appears.
-
-    Done! Open Chrome — the extension is ready.
-
-  HOW TO UNINSTALL:
-
-    Step 1 — Double-click "uninstall.bat"
-    Step 2 — Close Chrome, reopen — the extension is removed.
-
-── MAC ──────────────────────────────────────────────────────────
-
-  HOW TO INSTALL (2 steps):
-
-    Step 1 — Double-click "install.command"
-
-    Step 2 — If Chrome is open, quit Chrome (Cmd+Q), then
-             press ENTER in the Terminal window that appears.
-
-    Done! Open Chrome — the extension is ready.
-
-  HOW TO UNINSTALL:
-
-    Step 1 — Open Terminal, drag "uninstall.sh" into it, press Enter
-    Step 2 — Close Chrome, reopen — the extension is removed.
-
-── TROUBLESHOOTING ──────────────────────────────────────────────
-
-  If the green dot icon doesn't appear in the toolbar:
-    - Click the puzzle icon 🧩 (Extensions) in Chrome's top-right
-    - Find "WA Chat Exporter" and click the pin 📌 icon
-
-  QUESTIONS? Contact your IT team or supervisor for help.
-
-
-██████████████████████████████████████████████████████████████████
-  BAHASA INDONESIA
-██████████████████████████████████████████████████████████████████
-
-YANG DIBUTUHKAN:
-  - Google Chrome sudah terpasang
-  - Akun WhatsApp sudah login di ponsel Anda (untuk pindai QR)
-
-── WINDOWS ──────────────────────────────────────────────────────
-
-  CARA INSTAL (2 langkah):
-
-    Langkah 1 — Klik dua kali "install.bat"
-
-    Langkah 2 — Jika Chrome terbuka, TUTUP SEMUA jendela Chrome,
-                lalu tekan ENTER di jendela hitam yang muncul.
-
-    Selesai! Buka Chrome — ekstensi sudah siap.
-
-  CARA MENGHAPUS:
-
-    Langkah 1 — Klik dua kali "uninstall.bat"
-    Langkah 2 — Tutup Chrome, buka kembali — ekstensi terhapus.
-
-── MAC ──────────────────────────────────────────────────────────
-
-  CARA INSTAL (2 langkah):
-
-    Langkah 1 — Klik dua kali "install.command"
-
-    Langkah 2 — Jika Chrome terbuka, tutup Chrome (Cmd+Q), lalu
-                tekan ENTER di jendela Terminal yang muncul.
-
-    Selesai! Buka Chrome — ekstensi sudah siap.
-
-  CARA MENGHAPUS:
-
-    Langkah 1 — Buka Terminal, seret "uninstall.sh" ke dalamnya, tekan Enter
-    Langkah 2 — Tutup Chrome, buka kembali — ekstensi terhapus.
-
-── MENGATASI MASALAH ────────────────────────────────────────────
-
-  Jika ikon bulat hijau tidak muncul di toolbar:
-    - Klik ikon puzzle 🧩 (Extensions) di kanan atas Chrome
-    - Cari "WA Chat Exporter" dan klik pin 📌
-
-  PERTANYAAN? Hubungi tim IT atau supervisor Anda.
-
-
-======================================================================
-  Version 13.0 — June 2026
-======================================================================
+Version 13.0 - June 2026

@@ -38,8 +38,13 @@ function toBase64(str) {
   return btoa(s);
 }
 
-function genCSV(msgs) {
-  let csv = '\uFEFFTimestamp,Sender,Message\n';
+function genCSV(msgs, chat) {
+  let header = '# Chat: ' + ((chat && chat.name) || 'Unknown');
+  if (chat && chat.id && !chat.isGroup) {
+    const phone = chat.id.split('@')[0];
+    if (phone && /^\d+$/.test(phone)) header += ' | Phone: ' + phone;
+  }
+  let csv = '\uFEFF' + header + '\nTimestamp,Sender,Message\n';
   for (const m of msgs) {
     const d = new Date(m.timestamp * 1000);
     const t = d.toISOString().replace('T', ' ').substring(0, 19);
@@ -48,8 +53,14 @@ function genCSV(msgs) {
   return csv;
 }
 
-function genTXT(msgs) {
-  let txt = '', last = '';
+function genTXT(msgs, chat) {
+  let header = '# Chat: ' + ((chat && chat.name) || 'Unknown');
+  if (chat && chat.id && !chat.isGroup) {
+    const phone = chat.id.split('@')[0];
+    if (phone && /^\d+$/.test(phone)) header += ' | Phone: ' + phone;
+  }
+  let txt = header + '\n';
+  let last = '';
   for (const m of msgs) {
     const d = new Date(m.timestamp * 1000);
     const ds = String(d.getDate()).padStart(2, '0') + '/' +
@@ -251,7 +262,8 @@ test('single message', () => {
 
 test('empty messages produces header only', () => {
   const csv = genCSV([]);
-  assert.strictEqual(csv, '\uFEFFTimestamp,Sender,Message\n');
+  assert.ok(csv.includes('\uFEFF'), 'has BOM');
+  assert.ok(csv.includes('Timestamp,Sender,Message'), 'has column headers');
 });
 
 test('escapes double quotes in text', () => {
@@ -269,7 +281,8 @@ test('messages appear in given order (no internal sort)', () => {
   ];
   const csv = genCSV(msgs);
   const lines = csv.split('\n');
-  assert.ok(lines[1].includes('Alice') && lines[2].includes('Bob'), 'order preserved as given');
+  // Line 0: BOM+header, Line 1: column names, Line 2+: data
+  assert.ok(lines[2].includes('Alice') && lines[3].includes('Bob'), 'order preserved as given');
 });
 
 test('handles null sender/body', () => {
@@ -284,12 +297,9 @@ test('handles null sender/body', () => {
 console.log('\n=== genTXT() ===');
 
 test('single message with date header', () => {
-  // Use noon UTC so the date is same across most timezones
-  // 2023-06-15 12:00:00 UTC = 1686830400
   const msgs = [{ timestamp: 1686830400, sender: 'Alice', body: 'Hello' }];
   const txt = genTXT(msgs);
-  // genTXT trims the result, so leading \n is removed
-  assert.ok(txt.match(/^\[\d{2}\/\d{2}\/\d{2}\]/), 'starts with date header: ' + txt.substring(0, 20));
+  assert.ok(txt.includes('[15/06/23]'), 'has date header: ' + txt.substring(0, 50));
   assert.ok(txt.includes('Hello'), 'has body');
 });
 
