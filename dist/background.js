@@ -218,7 +218,8 @@ function genCSV(msgs, chat) {
   for (const m of msgs) {
     const d = new Date(m.timestamp*1000);
     const ds = String(d.getDate()).padStart(2,'0') + '/' +
-      String(d.getMonth()+1).padStart(2,'0') + ' ' +
+      String(d.getMonth()+1).padStart(2,'0') + '/' +
+      String(d.getFullYear()).slice(-2) + ' ' +
       String(d.getHours()).padStart(2,'0') + ':' +
       String(d.getMinutes()).padStart(2,'0');
     csv += ds + ",\"" + (m.sender||"").replace(/"/g,'""') + "\",\"" + (m.body||"").replace(/"/g,'""') + "\"\n";

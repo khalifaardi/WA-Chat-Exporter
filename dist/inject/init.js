@@ -204,38 +204,39 @@
           participants = [];
           for (const p of rawParticipants) {
             const pJid = (p.id && p.id._serialized) ? p.id._serialized : String(p.id || '');
-            // Try name first, then __x_phoneNumber, then id
-            let pPhone = phoneFromName(p.name) || phoneFromName(p.pushname) || phoneFromName(p.__x_name) || phoneFromName(p.__x_pushname);
-            // Try __x_phoneNumber on participant
-            if (!pPhone && p.__x_phoneNumber) {
-              try {
-                const desc = Object.getOwnPropertyDescriptor(p, '__x_phoneNumber');
-                let raw = desc ? (desc.get ? desc.get.call(p) : desc.value) : p.__x_phoneNumber;
-                pPhone = extractPhone(raw) || phoneFromName(String(raw));
-              } catch(e) {}
-            }
-            if (!pPhone) {
-              pPhone = extractPhone(p);
-            }
+            let pPhone = null;
             let pName = extractName(p);
 
-            // If no phone from participant object, try contact lookup
-            if (!pPhone) {
-              try {
-                const contact = await WPP.contact.get(pJid);
-                if (contact) {
-                  pPhone = extractPhone(contact);
-                  pName = extractName(contact) || pName;
+            // Try to get contact info for better name and phone
+            try {
+              const contact = await WPP.contact.get(pJid);
+              if (contact) {
+                // Try __x_phoneNumber on the contact
+                if (contact.__x_phoneNumber) {
+                  try {
+                    const desc = Object.getOwnPropertyDescriptor(contact, '__x_phoneNumber');
+                    let raw = desc ? (desc.get ? desc.get.call(contact) : desc.value) : contact.__x_phoneNumber;
+                    pPhone = extractPhone(raw);
+                  } catch(e) {}
                 }
-              } catch (e) {
-                log('    Contact lookup failed for participant:', pJid);
+                if (!pPhone) pPhone = extractPhone(contact);
+                // Use contact name if better than participant name
+                const cName = extractName(contact);
+                if (cName !== 'Unknown') pName = cName;
               }
+            } catch(e) {}
+
+            // Fallback: extract from participant object
+            if (!pPhone) pPhone = extractPhone(p);
+            // Try name from participant's own properties
+            if (pName === 'Unknown') {
+              pName = phoneFromName(p.name) || phoneFromName(p.pushname) 
+                || extractName({ name: p.name, pushname: p.pushname, formattedName: p.formattedName }) 
+                || pName;
             }
 
             if (pPhone && /^\d+$/.test(pPhone)) {
               participants.push({ id: pJid, phone: pPhone, name: pName });
-            } else {
-              log('    Skipping participant (no valid phone):', pJid);
             }
           }
           log('  Final participants count:', participants.length);
