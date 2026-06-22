@@ -77,32 +77,34 @@
   });
 
   // ============================================================
-  // Helper: extract phone number from a contact-like object
-  // Tries: id._serialized user part, id.user, contact.phone, raw string
+  // Helper: extract phone number from a contact-like object or chat ID
+  // Priority: id.user (often has real phone even with LID), then _serialized split, then string
   // ============================================================
   function extractPhone(obj) {
     if (!obj) return null;
-    // Try id._serialized (e.g. "628xxx@c.us" or "123xxx@lid")
-    if (obj.id && obj.id._serialized) {
-      const parts = String(obj.id._serialized).split('@');
-      if (parts[0] && /^\d+$/.test(parts[0])) return parts[0];
-    }
-    // Try id.user (sometimes present)
-    if (obj.id && obj.id.user) {
-      const u = String(obj.id.user);
+    // If obj has an 'id' property, use that
+    const idObj = obj.id || obj;
+    // PRIORITY 1: id.user — often the real phone number even when LID is used
+    if (idObj.user) {
+      const u = String(idObj.user);
       if (/^\d+$/.test(u)) return u;
     }
-    // Try string id with @ split
+    // PRIORITY 2: id._serialized split on @ (handles "628xxx@c.us" and "123xxx@lid")
+    if (idObj._serialized) {
+      const parts = String(idObj._serialized).split('@');
+      if (parts[0] && /^\d+$/.test(parts[0])) return parts[0];
+    }
+    // PRIORITY 3: raw string split on @
     if (typeof obj === 'string') {
       const parts = obj.split('@');
       if (parts[0] && /^\d+$/.test(parts[0])) return parts[0];
     }
-    // Try obj.phone
+    // PRIORITY 4: obj.phone field
     if (obj.phone) {
       const p = String(obj.phone).split('@')[0];
       if (/^\d+$/.test(p)) return p;
     }
-    // Try obj.toString() if it looks like "628xxx@c.us"
+    // PRIORITY 5: toString() if it looks like a JID/LID
     if (obj.toString && typeof obj.toString === 'function') {
       const s = obj.toString();
       const parts = s.split('@');
@@ -112,15 +114,17 @@
   }
 
   // ============================================================
-  // Helper: get display name from a contact/participant object
+  // Helper: get display name — NEVER fall back to phone/LID number
   // ============================================================
-  function extractName(obj, fallbackPhone) {
-    if (!obj) return fallbackPhone || 'Unknown';
-    if (obj.pushname) return obj.pushname;
-    if (obj.name) return obj.name;
-    if (obj.formattedName) return obj.formattedName;
-    if (obj.shortName) return obj.shortName;
-    return fallbackPhone || 'Unknown';
+  function extractName(obj) {
+    if (!obj) return 'Unknown';
+    if (obj.pushname && obj.pushname !== 'Unknown') return obj.pushname;
+    if (obj.name && obj.name !== 'Unknown') return obj.name;
+    if (obj.formattedName && obj.formattedName !== 'Unknown') return obj.formattedName;
+    if (obj.shortName && obj.shortName !== 'Unknown') return obj.shortName;
+    // Check if obj is a string that looks like a name (not just digits)
+    if (typeof obj === 'string' && !/^[\d\s@.:+-]+$/.test(obj) && obj.length > 0) return obj;
+    return 'Unknown';
   }
 
   // ============================================================
@@ -190,7 +194,7 @@
           for (const p of rawParticipants) {
             const pJid = (p.id && p.id._serialized) ? p.id._serialized : String(p.id || '');
             let pPhone = extractPhone(p);
-            let pName = extractName(p, pPhone);
+            let pName = extractName(p);
 
             // If no phone from participant object, try contact lookup
             if (!pPhone) {
@@ -198,7 +202,7 @@
                 const contact = await WPP.contact.get(pJid);
                 if (contact) {
                   pPhone = extractPhone(contact);
-                  pName = extractName(contact, pPhone) || pName;
+                  pName = extractName(contact) || pName;
                 }
               } catch (e) {
                 log('    Contact lookup failed for participant:', pJid);
@@ -206,7 +210,7 @@
             }
 
             if (pPhone && /^\d+$/.test(pPhone)) {
-              participants.push({ id: pJid, phone: pPhone, name: pName || pPhone });
+              participants.push({ id: pJid, phone: pPhone, name: pName });
             } else {
               log('    Skipping participant (no valid phone):', pJid);
             }
@@ -218,30 +222,40 @@
         }
       } else {
         // ---- INDIVIDUAL CHAT ----
-        log('Processing INDIVIDUAL:', chat.name || id, 'id:', id);
-        // Try contact property on chat first
-        if (chat.contact) {
+        log('Processing INDIVIDUAL:', chat.name || id, 'id._serialized:', id);
+
+        // Strategy 1: extract from chat.id.user (often has real phone even with LID)
+        phone = extractPhone(chat.id);
+        if (phone) log('  Phone from chat.id:', phone);
+
+        // Strategy 2: Try chat.contact property
+        if (!phone && chat.contact) {
           phone = extractPhone(chat.contact);
           if (phone) log('  Phone from chat.contact:', phone);
         }
-        // Try WPP.contact.get
+
+        // Strategy 3: Try WPP.contact.get
         if (!phone) {
           try {
             const contact = await WPP.contact.get(id);
             if (contact) {
               phone = extractPhone(contact);
               if (phone) log('  Phone from WPP.contact.get:', phone);
-              else log('  WPP.contact.get returned contact but no phone extractable:', JSON.stringify(contact).substring(0, 200));
+              else log('  WPP.contact.get returned but no phone. Keys:', Object.keys(contact).join(','));
             }
           } catch (e) {
             log('  WPP.contact.get failed:', e.message);
           }
         }
-        // Fallback: extract from id string itself
+
+        // Strategy 4: fallback string extraction
         if (!phone) {
           phone = extractPhone(id);
-          if (phone) log('  Phone from id fallback:', phone);
-          else err('  NO phone found for chat:', chat.name, 'id:', id);
+          if (phone) log('  Phone from string fallback:', phone);
+        }
+
+        if (!phone) {
+          err('  NO phone found for:', chat.name, '| id keys:', Object.keys(chat.id || {}).join(','), '| serialized:', id);
         }
       }
 

@@ -211,11 +211,14 @@ function genCSV(msgs, chat) {
   } else if (chat && chat.isGroup && chat.participants && chat.participants.length > 0) {
     header += ' | ' + chat.participants.map(p => p.name + ' (' + p.phone + ')').join(' ');
   }
-  let csv = '\uFEFF' + header + '\nTimestamp,Sender,Message\n';
+  let csv = '\uFEFF' + header + '\nTime,Sender,Message\n';
   for (const m of msgs) {
     const d = new Date(m.timestamp*1000);
-    const t = d.toISOString().replace("T"," ").substring(0,19);
-    csv += t + ",\"" + (m.sender||"").replace(/"/g,'""') + "\",\"" + (m.body||"").replace(/"/g,'""') + "\"\n";
+    const ds = String(d.getDate()).padStart(2,'0') + '/' +
+      String(d.getMonth()+1).padStart(2,'0') + ' ' +
+      String(d.getHours()).padStart(2,'0') + ':' +
+      String(d.getMinutes()).padStart(2,'0');
+    csv += ds + ",\"" + (m.sender||"").replace(/"/g,'""') + "\",\"" + (m.body||"").replace(/"/g,'""') + "\"\n";
   }
   return csv;
 }
