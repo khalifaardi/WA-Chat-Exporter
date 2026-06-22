@@ -133,6 +133,31 @@
   async function getChats() {
     const chats = await WPP.chat.list({ count: -1 });
     log('Total chats from WPP:', chats.length);
+    // Dump first chat structure for debugging
+    if (chats.length > 0) {
+      const c0 = chats[0];
+      err('DEBUG first chat keys:', Object.keys(c0).join(','));
+      err('DEBUG first chat name:', c0.name || c0.formattedTitle);
+      err('DEBUG first chat id keys:', Object.keys(c0.id || {}).join(','));
+      err('DEBUG first chat id._serialized:', c0.id && c0.id._serialized);
+      err('DEBUG first chat id.user:', c0.id && c0.id.user);
+      err('DEBUG first chat id.server:', c0.id && c0.id.server);
+      if (c0.contact) {
+        err('DEBUG first chat contact keys:', Object.keys(c0.contact).join(','));
+        err('DEBUG first chat contact id._serialized:', c0.contact.id && c0.contact.id._serialized);
+        err('DEBUG first chat contact id.user:', c0.contact.id && c0.contact.id.user);
+      }
+      if (c0.groupMetadata) {
+        err('DEBUG first chat groupMetadata keys:', Object.keys(c0.groupMetadata).join(','));
+        if (c0.groupMetadata.participants && c0.groupMetadata.participants.length) {
+          const p0 = c0.groupMetadata.participants[0];
+          err('DEBUG first participant keys:', Object.keys(p0).join(','));
+          err('DEBUG first participant id keys:', Object.keys(p0.id || {}).join(','));
+          err('DEBUG first participant id._serialized:', p0.id && p0.id._serialized);
+          err('DEBUG first participant id.user:', p0.id && p0.id.user);
+        }
+      }
+    }
     const result = [];
     for (const chat of chats) {
       const id = chat.id._serialized || chat.id.toString();
@@ -234,17 +259,38 @@
           if (phone) log('  Phone from chat.contact:', phone);
         }
 
-        // Strategy 3: Try WPP.contact.get
+        // Strategy 3: Try WPP.contact.get with original id
         if (!phone) {
           try {
             const contact = await WPP.contact.get(id);
             if (contact) {
               phone = extractPhone(contact);
-              if (phone) log('  Phone from WPP.contact.get:', phone);
-              else log('  WPP.contact.get returned but no phone. Keys:', Object.keys(contact).join(','));
+              if (phone) log('  Phone from WPP.contact.get(id):', phone);
+              else {
+                err('  WPP.contact.get returned, keys:', Object.keys(contact).join(','));
+                if (contact.id) err('    contact.id keys:', Object.keys(contact.id).join(','), 'user:', contact.id.user, 'serialized:', contact.id._serialized);
+              }
             }
           } catch (e) {
-            log('  WPP.contact.get failed:', e.message);
+            log('  WPP.contact.get(id) failed:', e.message);
+          }
+        }
+
+        // Strategy 4: try @c.us alias (old JID format might still work)
+        if (!phone && id.includes('@')) {
+          try {
+            const userPart = extractPhone(chat.id);
+            if (userPart) {
+              const cusId = userPart + '@c.us';
+              log('  Trying @c.us alias:', cusId);
+              const contact = await WPP.contact.get(cusId);
+              if (contact) {
+                phone = extractPhone(contact);
+                if (phone) log('  Phone from @c.us alias:', phone);
+              }
+            }
+          } catch (e) {
+            log('  @c.us alias failed:', e.message);
           }
         }
 

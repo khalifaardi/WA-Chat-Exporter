@@ -205,13 +205,16 @@ async function startExport(settings) {
 }
 
 function genCSV(msgs, chat) {
-  let header = '# Chat: ' + (chat.name || 'Unknown');
+  let meta = '# Chat: ' + (chat.name || 'Unknown');
   if (chat && chat.id && !chat.isGroup && chat.phone) {
-    header += ' (' + chat.phone + ')';
-  } else if (chat && chat.isGroup && chat.participants && chat.participants.length > 0) {
-    header += ' | ' + chat.participants.map(p => p.name + ' (' + p.phone + ')').join(' ');
+    meta += ' (' + chat.phone + ')';
   }
-  let csv = '\uFEFF' + header + '\nTime,Sender,Message\n';
+  let csv = '\uFEFF' + meta + '\n';
+  // Participants on separate line so the table columns stay narrow
+  if (chat && chat.isGroup && chat.participants && chat.participants.length > 0) {
+    csv += '# Participants: ' + chat.participants.map(p => p.name + ' (' + p.phone + ')').join(', ') + '\n';
+  }
+  csv += 'Time,Sender,Message\n';
   for (const m of msgs) {
     const d = new Date(m.timestamp*1000);
     const ds = String(d.getDate()).padStart(2,'0') + '/' +
@@ -228,7 +231,7 @@ function genTXT(msgs, chat) {
   if (chat && chat.id && !chat.isGroup && chat.phone) {
     header += ' (' + chat.phone + ')';
   } else if (chat && chat.isGroup && chat.participants && chat.participants.length > 0) {
-    header += ' | ' + chat.participants.map(p => p.name + ' (' + p.phone + ')').join(' ');
+    header += ' | ' + chat.participants.map(p => p.name + ' (' + p.phone + ')').join(', ');
   }
   let txt = header + '\n';
   let last = '';
