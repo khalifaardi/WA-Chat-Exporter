@@ -264,10 +264,18 @@
           participants = [];
           for (const p of rawParticipants) {
             const pJid = (p.id && p.id._serialized) ? p.id._serialized : String(p.id || '');
-            let pPhone = extractPhone(p) || phoneFromName(p.name) || phoneFromName(p.pushname) || phoneFromName(p.__x_name) || phoneFromName(p.__x_pushname);
+            // Try name first, then __x_phoneNumber, then id
+            let pPhone = phoneFromName(p.name) || phoneFromName(p.pushname) || phoneFromName(p.__x_name) || phoneFromName(p.__x_pushname);
             // Try __x_phoneNumber on participant
             if (!pPhone && p.__x_phoneNumber) {
-              pPhone = extractPhone(p.__x_phoneNumber) || phoneFromName(String(p.__x_phoneNumber));
+              try {
+                const desc = Object.getOwnPropertyDescriptor(p, '__x_phoneNumber');
+                let raw = desc ? (desc.get ? desc.get.call(p) : desc.value) : p.__x_phoneNumber;
+                pPhone = extractPhone(raw) || phoneFromName(String(raw));
+              } catch(e) {}
+            }
+            if (!pPhone) {
+              pPhone = extractPhone(p);
             }
             let pName = extractName(p);
 
@@ -303,19 +311,7 @@
         phone = phoneFromName(chat.name) || phoneFromName(chat.formattedTitle);
         if (phone) log('  Phone from name:', phone);
 
-        // Strategy 2: extract from chat.id
-        if (!phone) {
-          phone = extractPhone(chat.id);
-          if (phone) log('  Phone from chat.id:', phone);
-        }
-
-        // Strategy 3: Try chat.contact
-        if (!phone && chat.contact) {
-          phone = extractPhone(chat.contact);
-          if (phone) log('  Phone from chat.contact:', phone);
-        }
-
-        // Strategy 4: Access __x_phoneNumber (may be an accessor/getter)
+        // Strategy 2: Try __x_phoneNumber (hidden phone for saved contacts)
         if (!phone && chat.__x_contact) {
           try {
             const desc = Object.getOwnPropertyDescriptor(chat.__x_contact, '__x_phoneNumber');
@@ -329,6 +325,18 @@
               }
             }
           } catch(e) { err('  __x_phoneNumber access failed:', e.message); }
+        }
+
+        // Strategy 3: extract from chat.id (LID — last resort for saved contacts)
+        if (!phone) {
+          phone = extractPhone(chat.id);
+          if (phone) log('  Phone from chat.id (LID):', phone);
+        }
+
+        // Strategy 4: Try chat.contact
+        if (!phone && chat.contact) {
+          phone = extractPhone(chat.contact);
+          if (phone) log('  Phone from chat.contact:', phone);
         }
 
         if (!phone) {
