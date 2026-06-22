@@ -160,9 +160,22 @@
         err('DEBUG INDIVIDUAL id._serialized:', indiv.id && indiv.id._serialized);
         err('DEBUG INDIVIDUAL id.user:', indiv.id && indiv.id.user);
         err('DEBUG INDIVIDUAL id.server:', indiv.id && indiv.id.server);
+        // Dump ALL contact properties
         if (indiv.contact) {
-          err('DEBUG INDIVIDUAL contact id.user:', indiv.contact.id && indiv.contact.id.user);
-          err('DEBUG INDIVIDUAL contact id._serialized:', indiv.contact.id && indiv.contact.id._serialized);
+          const cKeys = Object.getOwnPropertyNames(indiv.contact);
+          err('DEBUG contact own property names:', cKeys.join(','));
+          for (const k of cKeys) {
+            try {
+              const v = indiv.contact[k];
+              if (typeof v === 'string' || typeof v === 'number') {
+                err('  contact.' + k + ':', v);
+              }
+            } catch(e) {}
+          }
+        }
+        // Try raw __x_contact
+        if (indiv.__x_contact) {
+          err('DEBUG __x_contact exists, keys:', Object.getOwnPropertyNames(indiv.__x_contact).join(','));
         }
       }
       // Safe participant check
@@ -175,6 +188,17 @@
             if (p0 && typeof p0 === 'object') {
               try { err('DEBUG participant keys:', Object.keys(p0).join(',')); } catch(e){}
               if (p0.id) err('DEBUG participant id._serialized:', p0.id._serialized, 'user:', p0.id.user);
+              // Dump participant contact if available
+              if (p0.contact) {
+                err('DEBUG participant has contact object');
+                const pcKeys = Object.getOwnPropertyNames(p0.contact);
+                for (const k of pcKeys) {
+                  try {
+                    const v = p0.contact[k];
+                    if (typeof v === 'string' || typeof v === 'number') err('  participant.contact.' + k + ':', v);
+                  } catch(e) {}
+                }
+              }
             }
           }
         } catch(e) { err('DEBUG participant read failed:', e.message); }
@@ -285,6 +309,12 @@
         if (!phone && chat.contact) {
           phone = extractPhone(chat.contact);
           if (phone) log('  Phone from chat.contact:', phone);
+        }
+
+        // Strategy 4: Try __x_contact (raw internal contact)
+        if (!phone && chat.__x_contact) {
+          phone = phoneFromName(chat.__x_contact.__x_vname) || extractPhone(chat.__x_contact);
+          if (phone) log('  Phone from __x_contact:', phone);
         }
 
         if (!phone) {
