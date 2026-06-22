@@ -118,11 +118,14 @@
   // ============================================================
   function extractName(obj) {
     if (!obj) return 'Unknown';
+    // WPP often uses __x_ prefixed properties
     if (obj.pushname && obj.pushname !== 'Unknown') return obj.pushname;
+    if (obj.__x_pushname && obj.__x_pushname !== 'Unknown') return obj.__x_pushname;
     if (obj.name && obj.name !== 'Unknown') return obj.name;
+    if (obj.__x_name && obj.__x_name !== 'Unknown') return obj.__x_name;
     if (obj.formattedName && obj.formattedName !== 'Unknown') return obj.formattedName;
+    if (obj.__x_formattedTitle && obj.__x_formattedTitle !== 'Unknown') return obj.__x_formattedTitle;
     if (obj.shortName && obj.shortName !== 'Unknown') return obj.shortName;
-    // Check if obj is a string that looks like a name (not just digits)
     if (typeof obj === 'string' && !/^[\d\s@.:+-]+$/.test(obj) && obj.length > 0) return obj;
     return 'Unknown';
   }
@@ -138,24 +141,33 @@
       const c0 = chats[0];
       err('DEBUG first chat keys:', Object.keys(c0).join(','));
       err('DEBUG first chat name:', c0.name || c0.formattedTitle);
-      err('DEBUG first chat id keys:', Object.keys(c0.id || {}).join(','));
       err('DEBUG first chat id._serialized:', c0.id && c0.id._serialized);
       err('DEBUG first chat id.user:', c0.id && c0.id.user);
       err('DEBUG first chat id.server:', c0.id && c0.id.server);
-      if (c0.contact) {
-        err('DEBUG first chat contact keys:', Object.keys(c0.contact).join(','));
-        err('DEBUG first chat contact id._serialized:', c0.contact.id && c0.contact.id._serialized);
-        err('DEBUG first chat contact id.user:', c0.contact.id && c0.contact.id.user);
-      }
-      if (c0.groupMetadata) {
-        err('DEBUG first chat groupMetadata keys:', Object.keys(c0.groupMetadata).join(','));
-        if (c0.groupMetadata.participants && c0.groupMetadata.participants.length) {
-          const p0 = c0.groupMetadata.participants[0];
-          err('DEBUG first participant keys:', Object.keys(p0).join(','));
-          err('DEBUG first participant id keys:', Object.keys(p0.id || {}).join(','));
-          err('DEBUG first participant id._serialized:', p0.id && p0.id._serialized);
-          err('DEBUG first participant id.user:', p0.id && p0.id.user);
+      err('DEBUG isGroup:', c0.id && c0.id.isGroup && c0.id.isGroup());
+      // Also dump an individual chat if possible
+      const indiv = chats.find(c => c.id && c.id.isGroup && !c.id.isGroup());
+      if (indiv) {
+        err('DEBUG INDIVIDUAL chat name:', indiv.name || indiv.formattedTitle);
+        err('DEBUG INDIVIDUAL id._serialized:', indiv.id && indiv.id._serialized);
+        err('DEBUG INDIVIDUAL id.user:', indiv.id && indiv.id.user);
+        err('DEBUG INDIVIDUAL id.server:', indiv.id && indiv.id.server);
+        if (indiv.contact) {
+          err('DEBUG INDIVIDUAL contact id.user:', indiv.contact.id && indiv.contact.id.user);
+          err('DEBUG INDIVIDUAL contact id._serialized:', indiv.contact.id && indiv.contact.id._serialized);
         }
+      }
+      // Safe participant check
+      if (c0.groupMetadata) {
+        try {
+          const plist = Array.from(c0.groupMetadata.participants || []);
+          err('DEBUG group participant count:', plist.length);
+          if (plist.length > 0) {
+            const p0 = plist[0];
+            err('DEBUG participant keys:', Object.keys(p0).join(','));
+            if (p0.id) err('DEBUG participant id._serialized:', p0.id._serialized, 'user:', p0.id.user);
+          }
+        } catch(e) { err('DEBUG participant read failed:', e.message); }
       }
     }
     const result = [];
@@ -167,35 +179,35 @@
 
       if (isGroup) {
         // ---- GROUP CHAT ----
-        log('Processing GROUP:', chat.name || id, 'id:', id);
+        log('Processing GROUP:', chat.name || id);
         try {
           let rawParticipants = [];
 
           // Strategy 1: WPP.group.getParticipants
           try {
             const gp = await WPP.group.getParticipants(id);
-            if (Array.isArray(gp) && gp.length) {
-              rawParticipants = gp;
-              log('  Got', gp.length, 'participants via WPP.group.getParticipants');
-            }
+            rawParticipants = Array.from(gp || []);
+            if (rawParticipants.length) log('  Got', rawParticipants.length, 'via WPP.group.getParticipants');
           } catch (e1) {
             log('  WPP.group.getParticipants failed:', e1.message);
           }
 
-          // Strategy 2: chat.groupMetadata.participants
+          // Strategy 2: chat.groupMetadata.participants (use Array.from for WPP collections)
           if (!rawParticipants.length && chat.groupMetadata && chat.groupMetadata.participants) {
-            rawParticipants = chat.groupMetadata.participants;
-            log('  Got', rawParticipants.length, 'participants via groupMetadata');
+            try {
+              rawParticipants = Array.from(chat.groupMetadata.participants);
+              if (rawParticipants.length) log('  Got', rawParticipants.length, 'via groupMetadata');
+            } catch(e) {
+              log('  groupMetadata.participants Array.from failed:', e.message);
+            }
           }
 
           // Strategy 3: WPP.group.getMembers
           if (!rawParticipants.length) {
             try {
               const gm = await WPP.group.getMembers(id);
-              if (Array.isArray(gm) && gm.length) {
-                rawParticipants = gm;
-                log('  Got', gm.length, 'participants via WPP.group.getMembers');
-              }
+              rawParticipants = Array.from(gm || []);
+              if (rawParticipants.length) log('  Got', rawParticipants.length, 'via WPP.group.getMembers');
             } catch (e2) {
               log('  WPP.group.getMembers failed:', e2.message);
             }
