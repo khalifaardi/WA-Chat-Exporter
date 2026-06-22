@@ -40,9 +40,10 @@ function toBase64(str) {
 
 function genCSV(msgs, chat) {
   let header = '# Chat: ' + ((chat && chat.name) || 'Unknown');
-  if (chat && chat.id && !chat.isGroup) {
-    const phone = chat.id.split('@')[0];
-    if (phone && /^\d+$/.test(phone)) header += ' | Phone: ' + phone;
+  if (chat && chat.id && !chat.isGroup && chat.phone) {
+    header += ' (' + chat.phone + ')';
+  } else if (chat && chat.isGroup && chat.participants && chat.participants.length > 0) {
+    header += ' | Participants: ' + chat.participants.map(p => p.name + ' (' + p.phone + ')').join(', ');
   }
   let csv = '\uFEFF' + header + '\nTimestamp,Sender,Message\n';
   for (const m of msgs) {
@@ -55,9 +56,10 @@ function genCSV(msgs, chat) {
 
 function genTXT(msgs, chat) {
   let header = '# Chat: ' + ((chat && chat.name) || 'Unknown');
-  if (chat && chat.id && !chat.isGroup) {
-    const phone = chat.id.split('@')[0];
-    if (phone && /^\d+$/.test(phone)) header += ' | Phone: ' + phone;
+  if (chat && chat.id && !chat.isGroup && chat.phone) {
+    header += ' (' + chat.phone + ')';
+  } else if (chat && chat.isGroup && chat.participants && chat.participants.length > 0) {
+    header += ' | Participants: ' + chat.participants.map(p => p.name + ' (' + p.phone + ')').join(', ');
   }
   let txt = header + '\n';
   let last = '';
@@ -83,11 +85,12 @@ function sleep(ms) {
 }
 
 // ============================================================
-// From inject/init.js — formatBody for media types
+// From inject/init.js — formatBody for media types + mention resolution
 // ============================================================
-function formatBody(msg) {
+function formatBody(msg, mentionMap) {
   const caption = msg.caption || '';
   const t = msg.type || '';
+  mentionMap = mentionMap || {};
 
   const mediaLabels = {
     'image':            '[Image]',
@@ -120,10 +123,22 @@ function formatBody(msg) {
   };
 
   const label = mediaLabels[t] || null;
-  if (label && caption) return label + ' ' + caption;
-  if (label) return label;
-  if (caption) return caption;
-  return msg.body || '';
+
+  let body = '';
+  if (label && caption) body = label + ' ' + caption;
+  else if (label) body = label;
+  else if (caption) body = caption;
+  else body = msg.body || '';
+
+  // Resolve @mentions: replace @phone@c.us → @phone
+  body = body.replace(/@(\d+)@c\.us\b/g, function(match, phone) {
+    return '@' + phone;
+  });
+  body = body.replace(/@([\d]+)@[\w.]+/g, function(match, phone) {
+    return '@' + phone;
+  });
+
+  return body;
 }
 
 // ============================================================
@@ -334,6 +349,59 @@ test('null sender shows "?"', () => {
 });
 
 // ============================================================
+// TESTS — genCSV/genTXT headers with phone & participants
+// ============================================================
+console.log('\n=== CSV/TXT headers with phone & participants ===');
+
+test('CSV header includes phone for individual chat', () => {
+  const chat = { id: '6281234567890@c.us', name: 'Alice', isGroup: false, phone: '6281234567890' };
+  const csv = genCSV([], chat);
+  assert.ok(csv.includes('# Chat: Alice (6281234567890)'), 'phone in header: ' + csv.substring(0, 80));
+});
+
+test('CSV header no phone if phone is null', () => {
+  const chat = { id: '6281234567890@c.us', name: 'Alice', isGroup: false, phone: null };
+  const csv = genCSV([], chat);
+  assert.ok(!csv.includes('('), 'no phone parens when phone null');
+});
+
+test('CSV header includes participants for group chat', () => {
+  const chat = {
+    id: '123@g.us', name: 'Team Chat', isGroup: true,
+    participants: [
+      { name: 'Alice', phone: '628111' },
+      { name: 'Bob', phone: '628222' }
+    ]
+  };
+  const csv = genCSV([], chat);
+  assert.ok(csv.includes('Participants: Alice (628111), Bob (628222)'), 'participants in CSV header');
+});
+
+test('CSV header no participants if group has none', () => {
+  const chat = { id: '123@g.us', name: 'Empty Group', isGroup: true, participants: [] };
+  const csv = genCSV([], chat);
+  assert.ok(!csv.includes('Participants'), 'no participants header when empty');
+});
+
+test('TXT header includes phone for individual chat', () => {
+  const chat = { id: '6281234567890@c.us', name: 'Alice', isGroup: false, phone: '6281234567890' };
+  const txt = genTXT([], chat);
+  assert.ok(txt.includes('# Chat: Alice (6281234567890)'), 'phone in TXT header');
+});
+
+test('TXT header includes participants for group chat', () => {
+  const chat = {
+    id: '123@g.us', name: 'Team Chat', isGroup: true,
+    participants: [
+      { name: 'Alice', phone: '628111' },
+      { name: 'Bob', phone: '628222' }
+    ]
+  };
+  const txt = genTXT([], chat);
+  assert.ok(txt.includes('Participants: Alice (628111), Bob (628222)'), 'participants in TXT header');
+});
+
+// ============================================================
 // TESTS — formatBody() media types
 // ============================================================
 console.log('\n=== formatBody() ===');
@@ -501,6 +569,47 @@ test('unknown type without body returns empty', () => {
 test('caption only, no body, no type match, no label', () => {
   const msg = { caption: 'Just a caption', type: 'unknown' };
   assert.strictEqual(formatBody(msg), 'Just a caption');
+});
+
+// ============================================================
+// TESTS — formatBody() mention resolution (@phone)
+// ============================================================
+console.log('\n=== formatBody() mention resolution ===');
+
+test('resolves @phone@c.us to @phone', () => {
+  const msg = { body: 'Hello @6281234567890@c.us how are you?', type: 'chat' };
+  const result = formatBody(msg);
+  assert.strictEqual(result, 'Hello @6281234567890 how are you?');
+});
+
+test('resolves multiple @c.us mentions', () => {
+  const msg = { body: '@628111@c.us and @628222@c.us joined', type: 'chat' };
+  const result = formatBody(msg);
+  assert.strictEqual(result, '@628111 and @628222 joined');
+});
+
+test('leaves plain @phone untouched', () => {
+  const msg = { body: 'Call @6281234567890 please', type: 'chat' };
+  const result = formatBody(msg);
+  assert.strictEqual(result, 'Call @6281234567890 please');
+});
+
+test('handles no mentions', () => {
+  const msg = { body: 'Hello world', type: 'chat' };
+  const result = formatBody(msg);
+  assert.strictEqual(result, 'Hello world');
+});
+
+test('resolves @phone@s.whatsapp.net to @phone', () => {
+  const msg = { body: 'Hey @6281234567890@s.whatsapp.net', type: 'chat' };
+  const result = formatBody(msg);
+  assert.strictEqual(result, 'Hey @6281234567890');
+});
+
+test('mention resolution with media caption', () => {
+  const msg = { body: '', type: 'image', caption: 'Look @628999@c.us' };
+  const result = formatBody(msg);
+  assert.strictEqual(result, '[Image] Look @628999');
 });
 
 // ============================================================

@@ -81,14 +81,52 @@
   // ============================================================
   async function getChats() {
     const chats = await WPP.chat.list({ count: -1 });
-    return chats
-      .map(chat => ({
-        id: chat.id._serialized || chat.id.toString(),
+    const result = [];
+    for (const chat of chats) {
+      const id = chat.id._serialized || chat.id.toString();
+      const isGroup = chat.id.isGroup ? chat.id.isGroup() : false;
+      let phone = null;
+      let participants = null;
+
+      if (isGroup) {
+        // Extract participant phone numbers from group metadata
+        try {
+          const rawParticipants = chat.groupMetadata && chat.groupMetadata.participants
+            ? chat.groupMetadata.participants
+            : [];
+          participants = [];
+          for (const p of rawParticipants) {
+            const jid = (p.id && p.id._serialized) ? p.id._serialized : (p.id || '').toString();
+            const pPhone = jid.split('@')[0];
+            if (pPhone && /^\d+$/.test(pPhone)) {
+              participants.push({
+                id: jid,
+                phone: pPhone,
+                name: p.pushname || p.name || pPhone
+              });
+            }
+          }
+          log('Group', chat.name, ':', participants.length, 'participants');
+        } catch (e) {
+          log('Failed to get participants for', chat.name, e.message);
+          participants = [];
+        }
+      } else {
+        // Individual chat — extract phone from JID (e.g., 6281234567890@c.us → 6281234567890)
+        phone = id.split('@')[0];
+        if (!/^\d+$/.test(phone)) phone = null;
+      }
+
+      result.push({
+        id,
         name: chat.name || chat.formattedTitle || 'Unknown',
-        isGroup: chat.id.isGroup ? chat.id.isGroup() : false,
-        t: chat.t || 0
-      }))
-      .sort((a, b) => (b.t || 0) - (a.t || 0));
+        isGroup,
+        t: chat.t || 0,
+        phone,
+        participants
+      });
+    }
+    return result.sort((a, b) => (b.t || 0) - (a.t || 0));
   }
 
   // ============================================================
@@ -106,24 +144,39 @@
         const ts = msg.t || msg.timestamp;
         return ts && ts >= fromMs && ts <= toMs;
       })
-      .map(msg => ({
-        id: msg.id ? msg.id.toString() : '',
-        timestamp: msg.t || msg.timestamp,
-        sender: msg.senderObj
-          ? (msg.senderObj.pushname || msg.senderObj.formattedName || msg.sender)
-          : (msg.author || msg.sender || ''),
-        body: formatBody(msg),
-        type: msg.type
-      }))
+      .map(msg => {
+        // Build mention map: JID → phone number for this message
+        const mentionMap = {};
+        const mentionedJidList = msg.mentionedJidList || msg.mentionedIds || [];
+        for (const jid of mentionedJidList) {
+          const jidStr = (jid && jid._serialized) ? jid._serialized : String(jid || '');
+          const phone = jidStr.split('@')[0];
+          if (phone && /^\d+$/.test(phone)) {
+            mentionMap[jidStr] = phone;
+            mentionMap[phone] = phone; // also map phone→phone for body replacement
+          }
+        }
+        return {
+          id: msg.id ? msg.id.toString() : '',
+          timestamp: msg.t || msg.timestamp,
+          sender: msg.senderObj
+            ? (msg.senderObj.pushname || msg.senderObj.formattedName || msg.sender)
+            : (msg.author || msg.sender || ''),
+          body: formatBody(msg, mentionMap),
+          type: msg.type
+        };
+      })
       .sort((a, b) => a.timestamp - b.timestamp);
   }
 
   // ============================================================
   // Format message body — human-readable for media types
+  // Resolves @mentions to phone numbers
   // ============================================================
-  function formatBody(msg) {
+  function formatBody(msg, mentionMap) {
     const caption = msg.caption || '';
     const t = msg.type || '';
+    mentionMap = mentionMap || {};
 
     const mediaLabels = {
       'image':            '[Image]',
@@ -157,10 +210,24 @@
 
     const label = mediaLabels[t] || null;
 
-    if (label && caption) return label + ' ' + caption;
-    if (label) return label;
-    if (caption) return caption;
-    return msg.body || '';
+    let body = '';
+    if (label && caption) body = label + ' ' + caption;
+    else if (label) body = label;
+    else if (caption) body = caption;
+    else body = msg.body || '';
+
+    // Resolve @mentions: replace @JID references with @phone numbers
+    // Handles both "@phone@c.us" → "@phone" and "@phone" stays as "@phone"
+    body = body.replace(/@(\d+)@c\.us\b/g, function(match, phone) {
+      return '@' + phone;
+    });
+
+    // Also resolve any JID-type mentions that have @s.whatsapp.net or other domains
+    body = body.replace(/@([\d]+)@[\w.]+/g, function(match, phone) {
+      return '@' + phone;
+    });
+
+    return body;
   }
 
 })();
