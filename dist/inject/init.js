@@ -265,6 +265,10 @@
           for (const p of rawParticipants) {
             const pJid = (p.id && p.id._serialized) ? p.id._serialized : String(p.id || '');
             let pPhone = extractPhone(p) || phoneFromName(p.name) || phoneFromName(p.pushname) || phoneFromName(p.__x_name) || phoneFromName(p.__x_pushname);
+            // Try __x_phoneNumber on participant
+            if (!pPhone && p.__x_phoneNumber) {
+              pPhone = extractPhone(p.__x_phoneNumber) || phoneFromName(String(p.__x_phoneNumber));
+            }
             let pName = extractName(p);
 
             // If no phone from participant object, try contact lookup
@@ -311,10 +315,29 @@
           if (phone) log('  Phone from chat.contact:', phone);
         }
 
-        // Strategy 4: Try __x_contact (raw internal contact)
-        if (!phone && chat.__x_contact) {
-          phone = phoneFromName(chat.__x_contact.__x_vname) || extractPhone(chat.__x_contact);
-          if (phone) log('  Phone from __x_contact:', phone);
+        // Strategy 4: Try __x_contact.__x_phoneNumber (internal phone field!)
+        if (!phone && chat.__x_contact && chat.__x_contact.__x_phoneNumber) {
+          const raw = chat.__x_contact.__x_phoneNumber;
+          err('DEBUG __x_phoneNumber type:', typeof raw, 'value:', raw);
+          if (typeof raw === 'string' && /^\d+$/.test(raw)) phone = raw;
+          else if (raw && typeof raw === 'object') {
+            // might be a Wid object
+            phone = extractPhone(raw) || phoneFromName(raw._serialized || raw.user || String(raw));
+          } else if (typeof raw === 'number') {
+            phone = String(raw);
+          }
+          if (phone) log('  Phone from __x_phoneNumber:', phone);
+        }
+
+        // Strategy 5: Try contact.__x_phoneNumber via getOwnPropertyDescriptor
+        if (!phone && chat.contact) {
+          try {
+            const desc = Object.getOwnPropertyDescriptor(chat.contact, '__x_phoneNumber');
+            if (desc && desc.value) {
+              phone = extractPhone(desc.value) || phoneFromName(String(desc.value));
+              if (phone) log('  Phone from descriptor:', phone);
+            }
+          } catch(e) {}
         }
 
         if (!phone) {
