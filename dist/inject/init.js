@@ -144,66 +144,6 @@
   async function getChats() {
     const chats = await WPP.chat.list({ count: -1 });
     log('Total chats from WPP:', chats.length);
-    // Dump first chat structure for debugging
-    if (chats.length > 0) {
-      const c0 = chats[0];
-      err('DEBUG first chat keys:', Object.keys(c0).join(','));
-      err('DEBUG first chat name:', c0.name || c0.formattedTitle);
-      err('DEBUG first chat id._serialized:', c0.id && c0.id._serialized);
-      err('DEBUG first chat id.user:', c0.id && c0.id.user);
-      err('DEBUG first chat id.server:', c0.id && c0.id.server);
-      err('DEBUG isGroup:', c0.id && c0.id.isGroup && c0.id.isGroup());
-      // Also dump an individual chat if possible
-      const indiv = chats.find(c => c.id && c.id.isGroup && !c.id.isGroup());
-      if (indiv) {
-        err('DEBUG INDIVIDUAL chat name:', indiv.name || indiv.formattedTitle);
-        err('DEBUG INDIVIDUAL id._serialized:', indiv.id && indiv.id._serialized);
-        err('DEBUG INDIVIDUAL id.user:', indiv.id && indiv.id.user);
-        err('DEBUG INDIVIDUAL id.server:', indiv.id && indiv.id.server);
-        // Dump ALL contact properties
-        if (indiv.contact) {
-          const cKeys = Object.getOwnPropertyNames(indiv.contact);
-          err('DEBUG contact own property names:', cKeys.join(','));
-          for (const k of cKeys) {
-            try {
-              const v = indiv.contact[k];
-              if (typeof v === 'string' || typeof v === 'number') {
-                err('  contact.' + k + ':', v);
-              }
-            } catch(e) {}
-          }
-        }
-        // Try raw __x_contact
-        if (indiv.__x_contact) {
-          err('DEBUG __x_contact exists, keys:', Object.getOwnPropertyNames(indiv.__x_contact).join(','));
-        }
-      }
-      // Safe participant check
-      if (c0.groupMetadata) {
-        try {
-          const plist = Array.from(c0.groupMetadata.participants || []);
-          err('DEBUG group participant count:', plist.length);
-          if (plist.length > 0) {
-            const p0 = plist[0];
-            if (p0 && typeof p0 === 'object') {
-              try { err('DEBUG participant keys:', Object.keys(p0).join(',')); } catch(e){}
-              if (p0.id) err('DEBUG participant id._serialized:', p0.id._serialized, 'user:', p0.id.user);
-              // Dump participant contact if available
-              if (p0.contact) {
-                err('DEBUG participant has contact object');
-                const pcKeys = Object.getOwnPropertyNames(p0.contact);
-                for (const k of pcKeys) {
-                  try {
-                    const v = p0.contact[k];
-                    if (typeof v === 'string' || typeof v === 'number') err('  participant.contact.' + k + ':', v);
-                  } catch(e) {}
-                }
-              }
-            }
-          }
-        } catch(e) { err('DEBUG participant read failed:', e.message); }
-      }
-    }
     const result = [];
     for (const chat of chats) {
       const id = chat.id._serialized || chat.id.toString();
@@ -318,16 +258,15 @@
             if (desc) {
               let raw = desc.value;
               if (desc.get) raw = desc.get.call(chat.__x_contact);
-              err('DEBUG __x_phoneNumber desc:', desc.get ? 'getter' : 'value', 'raw:', raw, 'type:', typeof raw);
               if (raw) {
                 phone = extractPhone(raw) || phoneFromName(String(raw));
                 if (phone) log('  Phone from __x_phoneNumber:', phone);
               }
             }
-          } catch(e) { err('  __x_phoneNumber access failed:', e.message); }
+          } catch(e) {}
         }
 
-        // Strategy 3: extract from chat.id (LID — last resort for saved contacts)
+        // Strategy 3: extract from chat.id (LID — last resort)
         if (!phone) {
           phone = extractPhone(chat.id);
           if (phone) log('  Phone from chat.id (LID):', phone);
