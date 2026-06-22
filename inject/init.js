@@ -113,6 +113,14 @@
     return null;
   }
 
+  // Helper: check if a name looks like a phone number (e.g. "+62 822-9940-1163" → "6282299401163")
+  function phoneFromName(name) {
+    if (!name) return null;
+    const digits = name.replace(/\D/g, '');
+    if (digits.length >= 8 && digits.length <= 16) return digits;
+    return null;
+  }
+
   // ============================================================
   // Helper: get display name — NEVER fall back to phone/LID number
   // ============================================================
@@ -164,8 +172,10 @@
           err('DEBUG group participant count:', plist.length);
           if (plist.length > 0) {
             const p0 = plist[0];
-            err('DEBUG participant keys:', Object.keys(p0).join(','));
-            if (p0.id) err('DEBUG participant id._serialized:', p0.id._serialized, 'user:', p0.id.user);
+            if (p0 && typeof p0 === 'object') {
+              try { err('DEBUG participant keys:', Object.keys(p0).join(',')); } catch(e){}
+              if (p0.id) err('DEBUG participant id._serialized:', p0.id._serialized, 'user:', p0.id.user);
+            }
           }
         } catch(e) { err('DEBUG participant read failed:', e.message); }
       }
@@ -230,7 +240,7 @@
           participants = [];
           for (const p of rawParticipants) {
             const pJid = (p.id && p.id._serialized) ? p.id._serialized : String(p.id || '');
-            let pPhone = extractPhone(p);
+            let pPhone = extractPhone(p) || phoneFromName(p.name) || phoneFromName(p.pushname) || phoneFromName(p.__x_name) || phoneFromName(p.__x_pushname);
             let pName = extractName(p);
 
             // If no phone from participant object, try contact lookup
@@ -259,61 +269,26 @@
         }
       } else {
         // ---- INDIVIDUAL CHAT ----
-        log('Processing INDIVIDUAL:', chat.name || id, 'id._serialized:', id);
+        log('Processing INDIVIDUAL:', chat.name || id);
 
-        // Strategy 1: extract from chat.id.user (often has real phone even with LID)
-        phone = extractPhone(chat.id);
-        if (phone) log('  Phone from chat.id:', phone);
+        // Strategy 1: Check if the name itself IS a phone number (unsaved contacts)
+        phone = phoneFromName(chat.name) || phoneFromName(chat.formattedTitle);
+        if (phone) log('  Phone from name:', phone);
 
-        // Strategy 2: Try chat.contact property
+        // Strategy 2: extract from chat.id
+        if (!phone) {
+          phone = extractPhone(chat.id);
+          if (phone) log('  Phone from chat.id:', phone);
+        }
+
+        // Strategy 3: Try chat.contact
         if (!phone && chat.contact) {
           phone = extractPhone(chat.contact);
           if (phone) log('  Phone from chat.contact:', phone);
         }
 
-        // Strategy 3: Try WPP.contact.get with original id
         if (!phone) {
-          try {
-            const contact = await WPP.contact.get(id);
-            if (contact) {
-              phone = extractPhone(contact);
-              if (phone) log('  Phone from WPP.contact.get(id):', phone);
-              else {
-                err('  WPP.contact.get returned, keys:', Object.keys(contact).join(','));
-                if (contact.id) err('    contact.id keys:', Object.keys(contact.id).join(','), 'user:', contact.id.user, 'serialized:', contact.id._serialized);
-              }
-            }
-          } catch (e) {
-            log('  WPP.contact.get(id) failed:', e.message);
-          }
-        }
-
-        // Strategy 4: try @c.us alias (old JID format might still work)
-        if (!phone && id.includes('@')) {
-          try {
-            const userPart = extractPhone(chat.id);
-            if (userPart) {
-              const cusId = userPart + '@c.us';
-              log('  Trying @c.us alias:', cusId);
-              const contact = await WPP.contact.get(cusId);
-              if (contact) {
-                phone = extractPhone(contact);
-                if (phone) log('  Phone from @c.us alias:', phone);
-              }
-            }
-          } catch (e) {
-            log('  @c.us alias failed:', e.message);
-          }
-        }
-
-        // Strategy 4: fallback string extraction
-        if (!phone) {
-          phone = extractPhone(id);
-          if (phone) log('  Phone from string fallback:', phone);
-        }
-
-        if (!phone) {
-          err('  NO phone found for:', chat.name, '| id keys:', Object.keys(chat.id || {}).join(','), '| serialized:', id);
+          err('  NO phone found for:', chat.name);
         }
       }
 
