@@ -43,7 +43,7 @@ function genCSV(msgs, chat) {
   if (chat && chat.id && !chat.isGroup && chat.phone) {
     header += ' (' + chat.phone + ')';
   } else if (chat && chat.isGroup && chat.participants && chat.participants.length > 0) {
-    header += ' | Participants: ' + chat.participants.map(p => p.name + ' (' + p.phone + ')').join(', ');
+    header += ' | ' + chat.participants.map(p => p.name + ' (' + p.phone + ')').join(' ');
   }
   let csv = '\uFEFF' + header + '\nTimestamp,Sender,Message\n';
   for (const m of msgs) {
@@ -59,7 +59,7 @@ function genTXT(msgs, chat) {
   if (chat && chat.id && !chat.isGroup && chat.phone) {
     header += ' (' + chat.phone + ')';
   } else if (chat && chat.isGroup && chat.participants && chat.participants.length > 0) {
-    header += ' | Participants: ' + chat.participants.map(p => p.name + ' (' + p.phone + ')').join(', ');
+    header += ' | ' + chat.participants.map(p => p.name + ' (' + p.phone + ')').join(' ');
   }
   let txt = header + '\n';
   let last = '';
@@ -130,13 +130,8 @@ function formatBody(msg, mentionMap) {
   else if (caption) body = caption;
   else body = msg.body || '';
 
-  // Resolve @mentions: replace @phone@c.us → @phone
-  body = body.replace(/@(\d+)@c\.us\b/g, function(match, phone) {
-    return '@' + phone;
-  });
-  body = body.replace(/@([\d]+)@[\w.]+/g, function(match, phone) {
-    return '@' + phone;
-  });
+  // Resolve @mentions: strip ANY @domain suffix, leaving clean @phonenumber
+  body = body.replace(/@(\d+)@[\w.]+/g, '@$1');
 
   return body;
 }
@@ -374,13 +369,13 @@ test('CSV header includes participants for group chat', () => {
     ]
   };
   const csv = genCSV([], chat);
-  assert.ok(csv.includes('Participants: Alice (628111), Bob (628222)'), 'participants in CSV header');
+  assert.ok(csv.includes('# Chat: Team Chat | Alice (628111) Bob (628222)'), 'participants space-separated in CSV header. Got: ' + csv.substring(0, 100));
 });
 
 test('CSV header no participants if group has none', () => {
   const chat = { id: '123@g.us', name: 'Empty Group', isGroup: true, participants: [] };
   const csv = genCSV([], chat);
-  assert.ok(!csv.includes('Participants'), 'no participants header when empty');
+  assert.ok(!csv.includes('|'), 'no pipe when no participants');
 });
 
 test('TXT header includes phone for individual chat', () => {
@@ -398,7 +393,7 @@ test('TXT header includes participants for group chat', () => {
     ]
   };
   const txt = genTXT([], chat);
-  assert.ok(txt.includes('Participants: Alice (628111), Bob (628222)'), 'participants in TXT header');
+  assert.ok(txt.includes('# Chat: Team Chat | Alice (628111) Bob (628222)'), 'participants space-separated in TXT header');
 });
 
 // ============================================================

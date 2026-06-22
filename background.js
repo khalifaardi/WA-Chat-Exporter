@@ -205,12 +205,11 @@ async function startExport(settings) {
 }
 
 function genCSV(msgs, chat) {
-  // Build header with phone if individual chat, or participants if group
   let header = '# Chat: ' + (chat.name || 'Unknown');
   if (chat && chat.id && !chat.isGroup && chat.phone) {
     header += ' (' + chat.phone + ')';
   } else if (chat && chat.isGroup && chat.participants && chat.participants.length > 0) {
-    header += ' | Participants: ' + chat.participants.map(p => p.name + ' (' + p.phone + ')').join(', ');
+    header += ' | ' + chat.participants.map(p => p.name + ' (' + p.phone + ')').join(' ');
   }
   let csv = '\uFEFF' + header + '\nTimestamp,Sender,Message\n';
   for (const m of msgs) {
@@ -222,12 +221,11 @@ function genCSV(msgs, chat) {
 }
 
 function genTXT(msgs, chat) {
-  // Build header with phone if individual chat, or participants if group
   let header = '# Chat: ' + (chat.name || 'Unknown');
   if (chat && chat.id && !chat.isGroup && chat.phone) {
     header += ' (' + chat.phone + ')';
   } else if (chat && chat.isGroup && chat.participants && chat.participants.length > 0) {
-    header += ' | Participants: ' + chat.participants.map(p => p.name + ' (' + p.phone + ')').join(', ');
+    header += ' | ' + chat.participants.map(p => p.name + ' (' + p.phone + ')').join(' ');
   }
   let txt = header + '\n';
   let last = '';

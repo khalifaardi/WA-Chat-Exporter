@@ -89,32 +89,63 @@
       let participants = null;
 
       if (isGroup) {
-        // Extract participant phone numbers from group metadata
+        // Get group participants with phone numbers
         try {
-          const rawParticipants = chat.groupMetadata && chat.groupMetadata.participants
-            ? chat.groupMetadata.participants
-            : [];
+          // Try WPP.group.getParticipants first
+          let rawParticipants = [];
+          try {
+            rawParticipants = await WPP.group.getParticipants(id);
+            log('Got participants via WPP.group for', chat.name);
+          } catch (e1) {
+            // Fallback: try groupMetadata
+            if (chat.groupMetadata && chat.groupMetadata.participants) {
+              rawParticipants = chat.groupMetadata.participants;
+              log('Got participants via groupMetadata for', chat.name);
+            }
+          }
+
           participants = [];
           for (const p of rawParticipants) {
             const jid = (p.id && p.id._serialized) ? p.id._serialized : (p.id || '').toString();
-            const pPhone = jid.split('@')[0];
+            // Extract phone: everything before the first @ (handles @c.us, @lid, @s.whatsapp.net, etc.)
+            const parts = jid.split('@');
+            const pPhone = parts[0] || '';
             if (pPhone && /^\d+$/.test(pPhone)) {
               participants.push({
                 id: jid,
                 phone: pPhone,
-                name: p.pushname || p.name || pPhone
+                name: p.pushname || p.name || p.formattedName || pPhone
               });
             }
           }
-          log('Group', chat.name, ':', participants.length, 'participants');
+          log('Group', chat.name, ':', participants.length, 'participants extracted');
         } catch (e) {
-          log('Failed to get participants for', chat.name, e.message);
+          log('Failed to get participants for', chat.name, ':', e.message);
           participants = [];
         }
       } else {
         // Individual chat — extract phone from JID (e.g., 6281234567890@c.us → 6281234567890)
-        phone = id.split('@')[0];
-        if (!/^\d+$/.test(phone)) phone = null;
+        // Works for both @c.us (JID) and @lid (LID) formats
+        const parts = id.split('@');
+        const rawPhone = parts[0] || '';
+        if (rawPhone && /^\d+$/.test(rawPhone)) {
+          phone = rawPhone;
+        }
+        // If extraction failed, try contact API
+        if (!phone) {
+          try {
+            const contact = await WPP.contact.get(id);
+            if (contact) {
+              phone = contact.phone || contact.id || (contact.id && contact.id.user) || null;
+              if (phone && typeof phone === 'object') phone = phone._serialized || phone.user || phone.toString();
+              if (phone) phone = String(phone).split('@')[0];
+              if (phone && !/^\d+$/.test(phone)) phone = null;
+            }
+          } catch (e) {
+            log('Contact lookup failed for', chat.name, ':', e.message);
+          }
+        }
+        log('Individual chat', chat.name, 'phone:', phone);
       }
 
       result.push({
@@ -216,16 +247,11 @@
     else if (caption) body = caption;
     else body = msg.body || '';
 
-    // Resolve @mentions: replace @JID references with @phone numbers
-    // Handles both "@phone@c.us" → "@phone" and "@phone" stays as "@phone"
-    body = body.replace(/@(\d+)@c\.us\b/g, function(match, phone) {
-      return '@' + phone;
-    });
+    // Resolve @mentions: strip ANY @domain suffix, leaving clean @phonenumber
+    // Handles: @628xxx@c.us, @628xxx@s.whatsapp.net, @xxx@lid, @xxx@anything
+    body = body.replace(/@(\d+)@[\w.]+/g, '@$1');
 
-    // Also resolve any JID-type mentions that have @s.whatsapp.net or other domains
-    body = body.replace(/@([\d]+)@[\w.]+/g, function(match, phone) {
-      return '@' + phone;
-    });
+    return body;
 
     return body;
   }
