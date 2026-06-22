@@ -77,10 +77,58 @@
   });
 
   // ============================================================
+  // Helper: extract phone number from a contact-like object
+  // Tries: id._serialized user part, id.user, contact.phone, raw string
+  // ============================================================
+  function extractPhone(obj) {
+    if (!obj) return null;
+    // Try id._serialized (e.g. "628xxx@c.us" or "123xxx@lid")
+    if (obj.id && obj.id._serialized) {
+      const parts = String(obj.id._serialized).split('@');
+      if (parts[0] && /^\d+$/.test(parts[0])) return parts[0];
+    }
+    // Try id.user (sometimes present)
+    if (obj.id && obj.id.user) {
+      const u = String(obj.id.user);
+      if (/^\d+$/.test(u)) return u;
+    }
+    // Try string id with @ split
+    if (typeof obj === 'string') {
+      const parts = obj.split('@');
+      if (parts[0] && /^\d+$/.test(parts[0])) return parts[0];
+    }
+    // Try obj.phone
+    if (obj.phone) {
+      const p = String(obj.phone).split('@')[0];
+      if (/^\d+$/.test(p)) return p;
+    }
+    // Try obj.toString() if it looks like "628xxx@c.us"
+    if (obj.toString && typeof obj.toString === 'function') {
+      const s = obj.toString();
+      const parts = s.split('@');
+      if (parts[0] && /^\d+$/.test(parts[0])) return parts[0];
+    }
+    return null;
+  }
+
+  // ============================================================
+  // Helper: get display name from a contact/participant object
+  // ============================================================
+  function extractName(obj, fallbackPhone) {
+    if (!obj) return fallbackPhone || 'Unknown';
+    if (obj.pushname) return obj.pushname;
+    if (obj.name) return obj.name;
+    if (obj.formattedName) return obj.formattedName;
+    if (obj.shortName) return obj.shortName;
+    return fallbackPhone || 'Unknown';
+  }
+
+  // ============================================================
   // Get all chats — sorted by last message (newest first)
   // ============================================================
   async function getChats() {
     const chats = await WPP.chat.list({ count: -1 });
+    log('Total chats from WPP:', chats.length);
     const result = [];
     for (const chat of chats) {
       const id = chat.id._serialized || chat.id.toString();
@@ -89,63 +137,112 @@
       let participants = null;
 
       if (isGroup) {
-        // Get group participants with phone numbers
+        // ---- GROUP CHAT ----
+        log('Processing GROUP:', chat.name || id, 'id:', id);
         try {
-          // Try WPP.group.getParticipants first
           let rawParticipants = [];
+
+          // Strategy 1: WPP.group.getParticipants
           try {
-            rawParticipants = await WPP.group.getParticipants(id);
-            log('Got participants via WPP.group for', chat.name);
+            const gp = await WPP.group.getParticipants(id);
+            if (Array.isArray(gp) && gp.length) {
+              rawParticipants = gp;
+              log('  Got', gp.length, 'participants via WPP.group.getParticipants');
+            }
           } catch (e1) {
-            // Fallback: try groupMetadata
-            if (chat.groupMetadata && chat.groupMetadata.participants) {
-              rawParticipants = chat.groupMetadata.participants;
-              log('Got participants via groupMetadata for', chat.name);
+            log('  WPP.group.getParticipants failed:', e1.message);
+          }
+
+          // Strategy 2: chat.groupMetadata.participants
+          if (!rawParticipants.length && chat.groupMetadata && chat.groupMetadata.participants) {
+            rawParticipants = chat.groupMetadata.participants;
+            log('  Got', rawParticipants.length, 'participants via groupMetadata');
+          }
+
+          // Strategy 3: WPP.group.getMembers
+          if (!rawParticipants.length) {
+            try {
+              const gm = await WPP.group.getMembers(id);
+              if (Array.isArray(gm) && gm.length) {
+                rawParticipants = gm;
+                log('  Got', gm.length, 'participants via WPP.group.getMembers');
+              }
+            } catch (e2) {
+              log('  WPP.group.getMembers failed:', e2.message);
             }
           }
 
-          participants = [];
-          for (const p of rawParticipants) {
-            const jid = (p.id && p.id._serialized) ? p.id._serialized : (p.id || '').toString();
-            // Extract phone: everything before the first @ (handles @c.us, @lid, @s.whatsapp.net, etc.)
-            const parts = jid.split('@');
-            const pPhone = parts[0] || '';
-            if (pPhone && /^\d+$/.test(pPhone)) {
-              participants.push({
-                id: jid,
-                phone: pPhone,
-                name: p.pushname || p.name || p.formattedName || pPhone
-              });
+          // Strategy 4: try WPP.group.getGroupInfo
+          if (!rawParticipants.length) {
+            try {
+              const gi = await WPP.group.getGroupInfo(id);
+              if (gi && gi.participants && gi.participants.length) {
+                rawParticipants = gi.participants;
+                log('  Got', gi.participants.length, 'participants via getGroupInfo');
+              }
+            } catch (e3) {
+              log('  WPP.group.getGroupInfo failed:', e3.message);
             }
           }
-          log('Group', chat.name, ':', participants.length, 'participants extracted');
+
+          // Process each participant
+          participants = [];
+          for (const p of rawParticipants) {
+            const pJid = (p.id && p.id._serialized) ? p.id._serialized : String(p.id || '');
+            let pPhone = extractPhone(p);
+            let pName = extractName(p, pPhone);
+
+            // If no phone from participant object, try contact lookup
+            if (!pPhone) {
+              try {
+                const contact = await WPP.contact.get(pJid);
+                if (contact) {
+                  pPhone = extractPhone(contact);
+                  pName = extractName(contact, pPhone) || pName;
+                }
+              } catch (e) {
+                log('    Contact lookup failed for participant:', pJid);
+              }
+            }
+
+            if (pPhone && /^\d+$/.test(pPhone)) {
+              participants.push({ id: pJid, phone: pPhone, name: pName || pPhone });
+            } else {
+              log('    Skipping participant (no valid phone):', pJid);
+            }
+          }
+          log('  Final participants count:', participants.length);
         } catch (e) {
-          log('Failed to get participants for', chat.name, ':', e.message);
+          err('  Group processing failed:', chat.name, e.message);
           participants = [];
         }
       } else {
-        // Individual chat — extract phone from JID (e.g., 6281234567890@c.us → 6281234567890)
-        // Works for both @c.us (JID) and @lid (LID) formats
-        const parts = id.split('@');
-        const rawPhone = parts[0] || '';
-        if (rawPhone && /^\d+$/.test(rawPhone)) {
-          phone = rawPhone;
+        // ---- INDIVIDUAL CHAT ----
+        log('Processing INDIVIDUAL:', chat.name || id, 'id:', id);
+        // Try contact property on chat first
+        if (chat.contact) {
+          phone = extractPhone(chat.contact);
+          if (phone) log('  Phone from chat.contact:', phone);
         }
-        // If extraction failed, try contact API
+        // Try WPP.contact.get
         if (!phone) {
           try {
             const contact = await WPP.contact.get(id);
             if (contact) {
-              phone = contact.phone || contact.id || (contact.id && contact.id.user) || null;
-              if (phone && typeof phone === 'object') phone = phone._serialized || phone.user || phone.toString();
-              if (phone) phone = String(phone).split('@')[0];
-              if (phone && !/^\d+$/.test(phone)) phone = null;
+              phone = extractPhone(contact);
+              if (phone) log('  Phone from WPP.contact.get:', phone);
+              else log('  WPP.contact.get returned contact but no phone extractable:', JSON.stringify(contact).substring(0, 200));
             }
           } catch (e) {
-            log('Contact lookup failed for', chat.name, ':', e.message);
+            log('  WPP.contact.get failed:', e.message);
           }
         }
-        log('Individual chat', chat.name, 'phone:', phone);
+        // Fallback: extract from id string itself
+        if (!phone) {
+          phone = extractPhone(id);
+          if (phone) log('  Phone from id fallback:', phone);
+          else err('  NO phone found for chat:', chat.name, 'id:', id);
+        }
       }
 
       result.push({
@@ -176,15 +273,16 @@
         return ts && ts >= fromMs && ts <= toMs;
       })
       .map(msg => {
-        // Build mention map: JID → phone number for this message
-        const mentionMap = {};
+        // Build mention map: mentioned ID → phone number
         const mentionedJidList = msg.mentionedJidList || msg.mentionedIds || [];
+        const mentionMap = {};
         for (const jid of mentionedJidList) {
           const jidStr = (jid && jid._serialized) ? jid._serialized : String(jid || '');
-          const phone = jidStr.split('@')[0];
-          if (phone && /^\d+$/.test(phone)) {
+          const phone = extractPhone(jidStr);
+          if (phone) {
             mentionMap[jidStr] = phone;
-            mentionMap[phone] = phone; // also map phone→phone for body replacement
+            const numPart = jidStr.split('@')[0];
+            if (numPart) mentionMap[numPart] = phone;
           }
         }
         return {
@@ -202,7 +300,7 @@
 
   // ============================================================
   // Format message body — human-readable for media types
-  // Resolves @mentions to phone numbers
+  // Resolves @mentions to phone numbers using mentionMap
   // ============================================================
   function formatBody(msg, mentionMap) {
     const caption = msg.caption || '';
@@ -247,11 +345,18 @@
     else if (caption) body = caption;
     else body = msg.body || '';
 
-    // Resolve @mentions: strip ANY @domain suffix, leaving clean @phonenumber
-    // Handles: @628xxx@c.us, @628xxx@s.whatsapp.net, @xxx@lid, @xxx@anything
+    // Step 1: Strip domain suffixes (@phone@c.us → @phone, @LID@lid → @LID)
     body = body.replace(/@(\d+)@[\w.]+/g, '@$1');
 
-    return body;
+    // Step 2: Replace LID mentions with phone numbers from mentionMap
+    if (Object.keys(mentionMap).length > 0) {
+      body = body.replace(/@(\d+)/g, function(match, num) {
+        if (mentionMap[num] && mentionMap[num] !== num) {
+          return '@' + mentionMap[num];
+        }
+        return match;
+      });
+    }
 
     return body;
   }

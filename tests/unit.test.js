@@ -130,8 +130,18 @@ function formatBody(msg, mentionMap) {
   else if (caption) body = caption;
   else body = msg.body || '';
 
-  // Resolve @mentions: strip ANY @domain suffix, leaving clean @phonenumber
+  // Step 1: Strip domain suffixes (@phone@c.us → @phone, @LID@lid → @LID)
   body = body.replace(/@(\d+)@[\w.]+/g, '@$1');
+
+  // Step 2: Replace LID mentions with phone numbers from mentionMap
+  if (Object.keys(mentionMap).length > 0) {
+    body = body.replace(/@(\d+)/g, function(match, num) {
+      if (mentionMap[num] && mentionMap[num] !== num) {
+        return '@' + mentionMap[num];
+      }
+      return match;
+    });
+  }
 
   return body;
 }
@@ -605,6 +615,27 @@ test('mention resolution with media caption', () => {
   const msg = { body: '', type: 'image', caption: 'Look @628999@c.us' };
   const result = formatBody(msg);
   assert.strictEqual(result, '[Image] Look @628999');
+});
+
+test('mentionMap replaces LID with phone', () => {
+  const msg = { body: 'Hello @123456789012345', type: 'chat' };
+  const mentionMap = { '123456789012345': '6281234567890' };
+  const result = formatBody(msg, mentionMap);
+  assert.strictEqual(result, 'Hello @6281234567890');
+});
+
+test('mentionMap replaces multiple LIDs', () => {
+  const msg = { body: '@111111@lid and @222222@lid joined', type: 'chat' };
+  const mentionMap = { '111111': '628111', '222222': '628222' };
+  const result = formatBody(msg, mentionMap);
+  assert.strictEqual(result, '@628111 and @628222 joined');
+});
+
+test('mentionMap does not replace unknown numbers', () => {
+  const msg = { body: 'Call @6281234567890', type: 'chat' };
+  const mentionMap = { '99999': '628999' };
+  const result = formatBody(msg, mentionMap);
+  assert.strictEqual(result, 'Call @6281234567890');
 });
 
 // ============================================================
