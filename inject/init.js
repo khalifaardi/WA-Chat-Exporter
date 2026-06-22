@@ -315,29 +315,20 @@
           if (phone) log('  Phone from chat.contact:', phone);
         }
 
-        // Strategy 4: Try __x_contact.__x_phoneNumber (internal phone field!)
-        if (!phone && chat.__x_contact && chat.__x_contact.__x_phoneNumber) {
-          const raw = chat.__x_contact.__x_phoneNumber;
-          err('DEBUG __x_phoneNumber type:', typeof raw, 'value:', raw);
-          if (typeof raw === 'string' && /^\d+$/.test(raw)) phone = raw;
-          else if (raw && typeof raw === 'object') {
-            // might be a Wid object
-            phone = extractPhone(raw) || phoneFromName(raw._serialized || raw.user || String(raw));
-          } else if (typeof raw === 'number') {
-            phone = String(raw);
-          }
-          if (phone) log('  Phone from __x_phoneNumber:', phone);
-        }
-
-        // Strategy 5: Try contact.__x_phoneNumber via getOwnPropertyDescriptor
-        if (!phone && chat.contact) {
+        // Strategy 4: Access __x_phoneNumber (may be an accessor/getter)
+        if (!phone && chat.__x_contact) {
           try {
-            const desc = Object.getOwnPropertyDescriptor(chat.contact, '__x_phoneNumber');
-            if (desc && desc.value) {
-              phone = extractPhone(desc.value) || phoneFromName(String(desc.value));
-              if (phone) log('  Phone from descriptor:', phone);
+            const desc = Object.getOwnPropertyDescriptor(chat.__x_contact, '__x_phoneNumber');
+            if (desc) {
+              let raw = desc.value;
+              if (desc.get) raw = desc.get.call(chat.__x_contact);
+              err('DEBUG __x_phoneNumber desc:', desc.get ? 'getter' : 'value', 'raw:', raw, 'type:', typeof raw);
+              if (raw) {
+                phone = extractPhone(raw) || phoneFromName(String(raw));
+                if (phone) log('  Phone from __x_phoneNumber:', phone);
+              }
             }
-          } catch(e) {}
+          } catch(e) { err('  __x_phoneNumber access failed:', e.message); }
         }
 
         if (!phone) {
