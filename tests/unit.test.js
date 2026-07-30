@@ -696,6 +696,278 @@ test('no timestamp filtered out', () => {
 });
 
 // ============================================================
+// From inject/init.js — extractPhone()
+// ============================================================
+function extractPhone(obj) {
+  if (!obj) return null;
+  const idObj = obj.id || obj;
+  if (idObj.user) {
+    const u = String(idObj.user);
+    if (/^\d+$/.test(u)) return u;
+  }
+  if (idObj._serialized) {
+    const parts = String(idObj._serialized).split('@');
+    if (parts[0] && /^\d+$/.test(parts[0])) return parts[0];
+  }
+  if (typeof obj === 'string') {
+    const parts = obj.split('@');
+    if (parts[0] && /^\d+$/.test(parts[0])) return parts[0];
+  }
+  if (obj.phone) {
+    const p = String(obj.phone).split('@')[0];
+    if (/^\d+$/.test(p)) return p;
+  }
+  if (obj.toString && typeof obj.toString === 'function') {
+    const s = obj.toString();
+    const parts = s.split('@');
+    if (parts[0] && /^\d+$/.test(parts[0])) return parts[0];
+  }
+  return null;
+}
+
+// ============================================================
+// From inject/init.js — extractName()
+// ============================================================
+function extractName(obj) {
+  if (!obj) return 'Unknown';
+  if (obj.pushname && obj.pushname !== 'Unknown') return obj.pushname;
+  if (obj.__x_pushname && obj.__x_pushname !== 'Unknown') return obj.__x_pushname;
+  if (obj.name && obj.name !== 'Unknown') return obj.name;
+  if (obj.__x_name && obj.__x_name !== 'Unknown') return obj.__x_name;
+  if (obj.formattedName && obj.formattedName !== 'Unknown') return obj.formattedName;
+  if (obj.__x_formattedTitle && obj.__x_formattedTitle !== 'Unknown') return obj.__x_formattedTitle;
+  if (obj.shortName && obj.shortName !== 'Unknown') return obj.shortName;
+  if (typeof obj === 'string' && !/^[\d\s@.:+-]+$/.test(obj) && obj.length > 0) return obj;
+  return 'Unknown';
+}
+
+// ============================================================
+// From inject/init.js — phoneFromName()
+// ============================================================
+function phoneFromName(name) {
+  if (!name) return null;
+  const digits = name.replace(/\D/g, '');
+  if (digits.length >= 8 && digits.length <= 16) return digits;
+  return null;
+}
+
+// ============================================================
+// TESTS — extractPhone()
+// ============================================================
+console.log('\n=== extractPhone() ===');
+
+test('null input returns null', () => {
+  assert.strictEqual(extractPhone(null), null);
+});
+
+test('undefined input returns null', () => {
+  assert.strictEqual(extractPhone(undefined), null);
+});
+
+test('id.user pure digits', () => {
+  const obj = { id: { user: '6281234567890' } };
+  assert.strictEqual(extractPhone(obj), '6281234567890');
+});
+
+test('id.user with non-digits returns null from user', () => {
+  const obj = { id: { user: 'abc123' } };
+  assert.strictEqual(extractPhone(obj), null);
+});
+
+test('id._serialized with @c.us', () => {
+  const obj = { id: { _serialized: '6281234567890@c.us' } };
+  assert.strictEqual(extractPhone(obj), '6281234567890');
+});
+
+test('id._serialized with @lid', () => {
+  const obj = { id: { _serialized: '123456789012345@lid' } };
+  assert.strictEqual(extractPhone(obj), '123456789012345');
+});
+
+test('id._serialized with @g.us (group) returns digits', () => {
+  const obj = { id: { _serialized: '123456789@g.us' } };
+  assert.strictEqual(extractPhone(obj), '123456789');
+});
+
+test('raw string with @c.us', () => {
+  assert.strictEqual(extractPhone('628999@c.us'), '628999');
+});
+
+test('raw string with @s.whatsapp.net', () => {
+  assert.strictEqual(extractPhone('628888@s.whatsapp.net'), '628888');
+});
+
+test('obj.phone field as fallback', () => {
+  const obj = { phone: '628777' };
+  assert.strictEqual(extractPhone(obj), '628777');
+});
+
+test('obj.phone with @suffix', () => {
+  const obj = { phone: '628777@c.us' };
+  assert.strictEqual(extractPhone(obj), '628777');
+});
+
+test('toString fallback', () => {
+  const obj = { toString: () => '628666@c.us' };
+  assert.strictEqual(extractPhone(obj), '628666');
+});
+
+test('no phone-like field returns null', () => {
+  const obj = { name: 'Alice', foo: 'bar' };
+  assert.strictEqual(extractPhone(obj), null);
+});
+
+test('empty object returns null', () => {
+  assert.strictEqual(extractPhone({}), null);
+});
+
+test('id.user takes priority over _serialized', () => {
+  const obj = { id: { user: '628111', _serialized: '628222@c.us' } };
+  assert.strictEqual(extractPhone(obj), '628111');
+});
+
+// ============================================================
+// TESTS — extractName()
+// ============================================================
+console.log('\n=== extractName() ===');
+
+test('null input returns Unknown', () => {
+  assert.strictEqual(extractName(null), 'Unknown');
+});
+
+test('undefined input returns Unknown', () => {
+  assert.strictEqual(extractName(undefined), 'Unknown');
+});
+
+test('pushname takes highest priority', () => {
+  const obj = {
+    pushname: 'Alice',
+    name: 'Bob',
+    __x_pushname: 'Charlie'
+  };
+  assert.strictEqual(extractName(obj), 'Alice');
+});
+
+test('skips pushname if it equals "Unknown"', () => {
+  const obj = { pushname: 'Unknown', name: 'Bob' };
+  assert.strictEqual(extractName(obj), 'Bob');
+});
+
+test('__x_pushname fallback', () => {
+  const obj = { __x_pushname: 'Charlie' };
+  assert.strictEqual(extractName(obj), 'Charlie');
+});
+
+test('name fallback', () => {
+  const obj = { name: 'Bob' };
+  assert.strictEqual(extractName(obj), 'Bob');
+});
+
+test('skips name if "Unknown"', () => {
+  const obj = { name: 'Unknown', formattedName: 'Bob Builder' };
+  assert.strictEqual(extractName(obj), 'Bob Builder');
+});
+
+test('__x_name fallback', () => {
+  const obj = { __x_name: 'Dana' };
+  assert.strictEqual(extractName(obj), 'Dana');
+});
+
+test('formattedName fallback', () => {
+  const obj = { formattedName: 'Bob Builder' };
+  assert.strictEqual(extractName(obj), 'Bob Builder');
+});
+
+test('__x_formattedTitle fallback', () => {
+  const obj = { __x_formattedTitle: 'The Builder' };
+  assert.strictEqual(extractName(obj), 'The Builder');
+});
+
+test('shortName fallback', () => {
+  const obj = { shortName: 'Bob' };
+  assert.strictEqual(extractName(obj), 'Bob');
+});
+
+test('string input with valid name', () => {
+  assert.strictEqual(extractName('Alice Cooper'), 'Alice Cooper');
+});
+
+test('string input that looks like phone returns Unknown', () => {
+  assert.strictEqual(extractName('+62 822-9940-1163'), 'Unknown');
+});
+
+test('string input that looks like JID passes through (letters in domain)', () => {
+  // "6281234567890@c.us" contains letters (c,u,s) so the phone-detection regex
+  // does not block it — it passes through as a name string.
+  assert.strictEqual(extractName('6281234567890@c.us'), '6281234567890@c.us');
+});
+
+test('empty string returns Unknown', () => {
+  assert.strictEqual(extractName(''), 'Unknown');
+});
+
+test('no matching fields returns Unknown', () => {
+  assert.strictEqual(extractName({ foo: 'bar' }), 'Unknown');
+});
+
+// ============================================================
+// TESTS — phoneFromName()
+// ============================================================
+console.log('\n=== phoneFromName() ===');
+
+test('null input returns null', () => {
+  assert.strictEqual(phoneFromName(null), null);
+});
+
+test('undefined input returns null', () => {
+  assert.strictEqual(phoneFromName(undefined), null);
+});
+
+test('empty string returns null', () => {
+  assert.strictEqual(phoneFromName(''), null);
+});
+
+test('formatted phone "+62 822-9940-1163"', () => {
+  assert.strictEqual(phoneFromName('+62 822-9940-1163'), '6282299401163');
+});
+
+test('phone with spaces "62812 3456 7890"', () => {
+  assert.strictEqual(phoneFromName('62812 3456 7890'), '6281234567890');
+});
+
+test('phone with dashes "62812-3456-7890"', () => {
+  assert.strictEqual(phoneFromName('62812-3456-7890'), '6281234567890');
+});
+
+test('phone with parens "(022) 12345678"', () => {
+  assert.strictEqual(phoneFromName('(022) 12345678'), '02212345678');
+});
+
+test('too short (< 8 digits) returns null', () => {
+  assert.strictEqual(phoneFromName('1234567'), null);
+});
+
+test('too long (> 16 digits) returns null', () => {
+  assert.strictEqual(phoneFromName('12345678901234567'), null);
+});
+
+test('boundary: exactly 8 digits', () => {
+  assert.strictEqual(phoneFromName('12345678'), '12345678');
+});
+
+test('boundary: exactly 16 digits', () => {
+  assert.strictEqual(phoneFromName('1234567890123456'), '1234567890123456');
+});
+
+test('common name (no digits) returns null', () => {
+  assert.strictEqual(phoneFromName('Alice'), null);
+});
+
+test('mixed text and digits too short', () => {
+  assert.strictEqual(phoneFromName('Call 123'), null);
+});
+
+// ============================================================
 // TESTS — sortChatsByLastMsg()
 // ============================================================
 console.log('\n=== sortChatsByLastMsg() ===');

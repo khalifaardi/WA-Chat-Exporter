@@ -1,4 +1,4 @@
-// popup.js v15
+// popup.js v16
 const D = id => document.getElementById(id);
 const $ = (s,p) => (p||document).querySelectorAll(s);
 

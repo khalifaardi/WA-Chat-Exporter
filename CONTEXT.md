@@ -1,52 +1,65 @@
-# WA Group Exporter
+# WA Chat Exporter
 
-A Chrome extension (Manifest V3) that scrapes WhatsApp Web to export chats and group members as CSV/HTML files.
+A Chrome extension (Manifest V3) that exports WhatsApp Web chats as CSV or plain text files using the [wppconnect/wa-js](https://github.com/wppconnect-team/wa-js) library for direct IndexedDB access.
 
 ## Language
 
 - **Chat** — Any WhatsApp conversation, either personal (one-on-one) or group. Referred to as `chat` in code.
-- **Sidebar** — The left panel in WhatsApp Web listing all chats. Uses React Virtualized (virtual list), meaning DOM elements for off-screen chats are created/destroyed dynamically.
-- **Virtual list** — WhatsApp Web's rendering technique: only visible chat rows exist in the DOM. Scrolling triggers re-render. This is the core challenge the extension solves — you can't just `querySelectorAll` once.
-- **Cell frame container** — WhatsApp's DOM element (`[data-testid="cell-frame-container"]`) wrapping each chat row in the sidebar. The extension uses this to identify chat entries.
-- **Pane side** — WhatsApp's sidebar container (`#pane-side`). The extension falls back to finding a scrollable `div` within it when the `chat-list` test ID is absent.
-- **Safe Mode** — An export mode that adds artificial delays (4–8s between chats, 45s pause every 15 chats) to avoid triggering WhatsApp rate limits.
-- **Collect all messages** — The process of scrolling the chat pane upward repeatedly until all messages within the date range are loaded. Uses a "no new messages" counter to detect when scrolling is exhausted.
-- **Export chat** — The primary feature: scrape messages from a selected chat within a date range, format as CSV or HTML, and trigger a browser download.
-- **Export members** — A secondary feature: scrape group participant names and phone numbers from the currently open group info panel.
+- **WPP** — The global `window.WPP` object injected by `wppconnect.js`, providing programmatic access to WhatsApp Web's internal module system (chats, messages, contacts, groups).
+- **IndexedDB** — WhatsApp Web's local offline store. The WPP library reads chat lists and message history directly from here — zero network requests are made during export.
+- **Content script bridge** — `content-script.js` acts as a message relay between the service worker (`background.js`) and the injected page scripts (`wppconnect.js` + `init.js`), using `window.postMessage` for page-context communication and `chrome.runtime.sendMessage` for extension messaging.
+- **Overlay** — A progress bar injected into the WhatsApp Web page by `content-script.js`, showing export status, pause/resume/cancel controls, and a completion toast.
+- **Safe Mode** — Always-on export pacing: randomized 4–8s delays between chats and a 15s pause every 20 chats to reduce detection risk. Timing is configurable in `background.js` (`CFG` object).
+- **Export chat** — The primary feature: read messages from selected chats within a date range via `WPP.chat.getMessages()`, format as CSV or TXT, and trigger a browser download to `WA_Export_YYYY-MM-DD/`.
 
 ## Architecture
 
-### Service Worker (`background.js`)
-The brain of the extension. All scraping, message collection, and file generation happen here. It uses `chrome.scripting.executeScript` to inject functions into the WhatsApp Web tab. Key subsystems:
+The extension has four layers, flowing from UI → orchestration → bridge → WhatsApp API:
 
-- **Chat loader** — Scrolls the sidebar incrementally, scraping visible chat names on each scroll step, until no new chats appear (8 consecutive rounds of no new names = done). Supports 1000+ contacts.
-- **Chat opener** — Given a chat name, scrolls the sidebar from top to bottom looking for a match, then clicks it. Falls back to full sidebar scan if the chat isn't in the currently visible rows.
-- **Message collector** — After opening a chat, scrolls the message pane upward in rounds. Each round: scroll up, wait for WhatsApp's loading spinner to disappear, scrape newly visible messages, stop when messages fall outside the date range. Stops after 15 consecutive rounds with no new messages (or 300 total rounds).
-- **File generator** — Converts collected messages to CSV (with BOM for Excel) or styled HTML, encodes as base64 data URI, triggers `chrome.downloads.download`.
-- **Progress system** — Broadcasts status via `chrome.storage.local`; the popup polls this every 700ms.
+### Popup (`popup.html` + `popup.js` v15)
+The user interface. Bilingual (EN/ID) with language toggle. Features a multi-select dropdown with search, date range picker, "export all messages" toggle, format picker (CSV/TXT radio buttons), and pause/resume/cancel controls. Polls `chrome.storage.local` every 1.5s for progress updates. Auto-opens WhatsApp Web tab on launch and shows a login wall screen when not authenticated.
 
-### Popup (`popup.html` + `popup.js`)
-The user interface. Two tabs: Export Chat and Member Grup. Features search/filter, select-all checkbox, Safe Mode toggle, pause/resume/cancel controls, and a progress bar. Settings are sent to the service worker via `chrome.runtime.sendMessage`.
+### Service Worker (`background.js` v13.1)
+The orchestrator. All export logic runs here. Communicates with the WhatsApp page via `chrome.tabs.sendMessage` to `content-script.js`. Key responsibilities:
+- **Chat loader** — Sends `GET_CHATS` action to the page bridge; receives the full chat list from `WPP.chat.list()`.
+- **Message fetcher** — Sends `GET_MESSAGES` with chat ID + date range; receives filtered messages from `WPP.chat.getMessages()` via IndexedDB.
+- **File generator** — Converts messages to CSV (with BOM for Excel) or plain text, encodes as base64 data URI, triggers `chrome.downloads.download`.
+- **Progress system** — Broadcasts status via `chrome.storage.local`; also sends overlay updates and toast notifications to the WhatsApp page.
+- **Safe Mode pacing** — Enforces delays (4–8s random) between chats and a 15s pause every 20 chats.
+- **Session expiry detection** — Detects auth/session errors from the page bridge and stops the export gracefully.
 
-### No content script
-Previously registered but unused `content.js` was removed in v12. All DOM access happens through `chrome.scripting.executeScript` from the service worker.
+### Content Script (`content-script.js` v13)
+Injected into WhatsApp Web by the manifest. Bridges the gap between the service worker (Chrome extension context) and the page scripts (WhatsApp Web context). Responsibilities:
+- **Message relay** — Forwards `WA_API_REQUEST` from background → page scripts via `window.postMessage`, returns responses.
+- **Script injection** — Dynamically injects `wppconnect.js` then `init.js` into the page when first needed.
+- **Progress overlay** — Creates and manages the floating overlay bar on WhatsApp Web (pause/resume/cancel buttons, progress bar, completion message).
+- **Toast notifications** — Shows temporary toast messages on the WhatsApp page for export completion/errors.
+
+### Page Scripts (`inject/`)
+Two scripts injected in sequence into the WhatsApp Web page context:
+
+- **`wppconnect.js`** (502 KB) — Compiled wa-js library bundle. Exposes `window.WPP` with modules: `WPP.chat`, `WPP.conn`, `WPP.contact`, `WPP.group`, etc.
+- **`init.js`** (v13) — The API bridge. Waits for `WPP.conn.isMainReady()`, then listens for `WA_EXPORTER_REQUEST` messages from the content script. Handles:
+  - `GET_CHATS` — Calls `WPP.chat.list()` and maps to `{id, name, isGroup, t}`. For groups, fetches participants via up to 4 fallback strategies (`WPP.group.getParticipants`, `groupMetadata`, `WPP.group.getMembers`, `WPP.group.getGroupInfo`). Extracts phone numbers and display names from multiple WPP object properties.
+  - `GET_MESSAGES` — Calls `WPP.chat.getMessages()` with date filtering, formats message bodies with human-readable media type labels (`[Image]`, `[Video]`, `[Sticker]`, etc.), resolves `@mentions` from LID to phone numbers.
 
 ## Key decisions
 
-1. **Virtual list handling** — WhatsApp's React Virtualized sidebar means chat rows appear/disappear as you scroll. The extension scrolls in small increments (600px), scrapes, and repeats. This is the only reliable way to enumerate all chats without direct API access.
+1. **WPP API over DOM scraping** — v13 replaced the old DOM-scraping approach (`chrome.scripting.executeScript`, virtual list scrolling, `[data-testid]` selectors) with direct IndexedDB access via wa-js. This is faster (instant chat loading, no scrolling), more reliable (not dependent on WhatsApp's DOM structure), and covers 100% of chats/messages regardless of UI state.
 
-2. **Chat lookup by name, not index** — Early versions used chat index (position in the sidebar). This broke when the sidebar was scrolled because React Virtualized reuses DOM elements. v12 uses name-based lookup, scanning all visible rows each time.
+2. **Message-passing bridge pattern** — Service worker can't directly access `window.WPP` (isolated contexts). The `content-script.js` ↔ `init.js` bridge uses `window.postMessage` for page-context communication with request/response IDs and 60s timeouts.
 
-3. **Message loading spinner detection** — After scrolling the chat pane, WhatsApp shows a loading indicator while fetching history. The extension waits for this indicator to disappear before scraping, using a DOM observer or timeout. Without this, stale/missing messages result.
+3. **IndexedDB reads, no network requests** — All data comes from WhatsApp's local offline store. The only network activity is the initial WhatsApp Web page load. This makes the extension fast and low-risk.
 
-4. **No official API** — WhatsApp has no public API for chat export. This extension uses DOM scraping, which is inherently fragile. Selectors like `[data-testid="cell-frame-container"]` are WhatsApp's internal test hooks and can change without notice.
+4. **Safe Mode always-on** — Unlike v12's toggle, v13 always applies delays. The 4–8s random delay between chats plus 15s pause every 20 chats provides a ~3-minute cycle per 20 chats. Since reads are from IndexedDB (not API calls), actual ban risk is very low — Safe Mode is a safety margin.
 
-5. **Sequential export, not parallel** — Chats are exported one at a time with configurable delays. Parallel scraping would be faster but dramatically increases the risk of WhatsApp rate-limiting or banning the session.
+5. **One file per chat, date-stamped folder** — Files are saved as `WA_Export_YYYY-MM-DD/ChatName_DateRange.ext`. This keeps exports organized and avoids filename collisions across multiple export sessions.
 
-6. **Date filtering is post-scrape** — Messages are collected until they fall outside the date range, then filtered. The extension cannot jump to a specific date in WhatsApp's UI, so it scrolls from newest backward.
+6. **Sequential export** — Chats are exported one at a time. Parallel would be faster but increases complexity and risk. The IndexedDB reads are fast enough that sequential is not a bottleneck.
 
 ## Flagged ambiguities
 
+- **wa-js version compatibility** — The bundled `wppconnect.js` must stay compatible with the current WhatsApp Web version. A WhatsApp Web update can break wa-js patches. The wppconnect team releases updates frequently — monitor `wppconnect-team/wa-js` releases.
 - **Persistence across WhatsApp restarts** — The extension holds no state beyond `chrome.storage`. If the user refreshes WhatsApp Web mid-export, all progress is lost and the export must restart.
-- **Selector fragility** — All DOM selectors are WhatsApp-internal and undocumented. A WhatsApp Web update can break any of them silently.
-- **Rate limit detection** — There's no detection of WhatsApp throttling. The Safe Mode delays are heuristic, not based on actual rate-limit signals from WhatsApp.
+- **Group participant extraction** — The 4 fallback strategies in `init.js` may not cover all edge cases. Some group metadata may not be available via WPP's public API surface.
+- **Large exports** — Very large chat histories (years of messages) may produce large CSV/TXT files. The base64 data URI approach has no explicit size limit but very large files (~50MB+) could cause browser memory pressure.

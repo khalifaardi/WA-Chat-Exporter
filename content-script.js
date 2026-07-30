@@ -1,4 +1,4 @@
-// content-script.js — v13
+// content-script.js — v14
 // Injected into WhatsApp Web by manifest. Bridges popup/background ↔ inject scripts.
 
 (function() {

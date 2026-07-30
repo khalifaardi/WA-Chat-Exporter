@@ -1,4 +1,4 @@
-// inject/init.js — v13
+// inject/init.js — v14
 // Bridge between the WPP API (injected via wppconnect.js) and content-script.js
 // Runs in the WhatsApp Web page context
 

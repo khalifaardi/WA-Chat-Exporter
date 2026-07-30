@@ -1,4 +1,4 @@
-// background.js v13.1 — Safe Mode always-on, overlay progress, folder save
+// background.js v14 — Safe Mode always-on, overlay progress, folder save
 const DBG = true;
 function lg(...a) { if(DBG) console.log("[BG]",...a); }
 function er(...a) { if(DBG) console.error("[BG]",...a); }
